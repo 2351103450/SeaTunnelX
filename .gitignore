@@ -4,6 +4,7 @@
 .kiro
 .augment
 .cursor
+.cache/
 
 # logs
 logs

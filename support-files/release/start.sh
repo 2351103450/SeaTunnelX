@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+RUN_DIR="$BASE_DIR/run"
+LOG_DIR="$BASE_DIR/logs"
+
+BACKEND_BIN="$BASE_DIR/seatunnelx"
+FRONTEND_NODE_BIN="${FRONTEND_NODE_BIN:-$BASE_DIR/runtime/node/bin/node}"
+FRONTEND_SERVER="$BASE_DIR/frontend/server.js"
+CONFIG_PATH="${CONFIG_PATH:-$BASE_DIR/config.yaml}"
+
+FRONTEND_ENABLE="${FRONTEND_ENABLE:-true}"
+FRONTEND_PORT="${FRONTEND_PORT:-80}"
+NEXT_PUBLIC_BACKEND_BASE_URL="${NEXT_PUBLIC_BACKEND_BASE_URL:-http://127.0.0.1:8000}"
+START_OBSERVABILITY="${START_OBSERVABILITY:-auto}"
+
+mkdir -p "$RUN_DIR" "$LOG_DIR"
+
+start_backend() {
+  local pidfile="$RUN_DIR/backend.pid"
+  if [[ -f "$pidfile" ]]; then
+    local pid
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo "backend already running (pid=$pid)"
+      return
+    fi
+    rm -f "$pidfile"
+  fi
+
+  if [[ ! -x "$BACKEND_BIN" ]]; then
+    echo "backend binary not found: $BACKEND_BIN"
+    exit 1
+  fi
+
+  CONFIG_PATH="$CONFIG_PATH" nohup "$BACKEND_BIN" api >>"$LOG_DIR/backend.log" 2>&1 &
+  echo $! >"$pidfile"
+  sleep 1
+  if kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    echo "backend started (pid=$(cat "$pidfile"))"
+  else
+    rm -f "$pidfile"
+    echo "backend failed to start, check log: $LOG_DIR/backend.log"
+    exit 1
+  fi
+}
+
+start_frontend() {
+  if [[ "$FRONTEND_ENABLE" != "true" && "$FRONTEND_ENABLE" != "1" ]]; then
+    echo "frontend disabled by FRONTEND_ENABLE=$FRONTEND_ENABLE"
+    return
+  fi
+
+  local pidfile="$RUN_DIR/frontend.pid"
+  if [[ -f "$pidfile" ]]; then
+    local pid
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo "frontend already running (pid=$pid)"
+      return
+    fi
+    rm -f "$pidfile"
+  fi
+
+  if [[ ! -x "$FRONTEND_NODE_BIN" ]]; then
+    echo "node runtime not found: $FRONTEND_NODE_BIN"
+    exit 1
+  fi
+  if [[ ! -f "$FRONTEND_SERVER" ]]; then
+    echo "frontend standalone server not found: $FRONTEND_SERVER"
+    exit 1
+  fi
+
+  PORT="$FRONTEND_PORT" \
+  NEXT_PUBLIC_BACKEND_BASE_URL="$NEXT_PUBLIC_BACKEND_BASE_URL" \
+  nohup "$FRONTEND_NODE_BIN" "$FRONTEND_SERVER" >>"$LOG_DIR/frontend.log" 2>&1 &
+  echo $! >"$pidfile"
+  sleep 1
+  if kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    echo "frontend started (pid=$(cat "$pidfile"), port=$FRONTEND_PORT)"
+  else
+    rm -f "$pidfile"
+    echo "frontend failed to start, check log: $LOG_DIR/frontend.log"
+    exit 1
+  fi
+}
+
+start_observability() {
+  if [[ "$START_OBSERVABILITY" == "false" || "$START_OBSERVABILITY" == "0" ]]; then
+    echo "observability start skipped by START_OBSERVABILITY=$START_OBSERVABILITY"
+    return
+  fi
+
+  if [[ -x "$BASE_DIR/deps/start-observability.sh" ]]; then
+    echo "starting bundled observability stack..."
+    (cd "$BASE_DIR" && "$BASE_DIR/deps/start-observability.sh")
+  else
+    echo "bundled observability stack not found, skipping"
+  fi
+}
+
+start_backend
+start_frontend
+start_observability
+
+echo
+echo "done."
+echo "  backend : http://127.0.0.1:8000"
+if [[ "$FRONTEND_ENABLE" == "true" || "$FRONTEND_ENABLE" == "1" ]]; then
+  echo "  frontend: http://127.0.0.1:$FRONTEND_PORT"
+fi

@@ -1,0 +1,448 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/dist/releases}"
+CACHE_DIR="${CACHE_DIR:-$ROOT_DIR/.cache/release}"
+
+ARCH_OPTION="amd64"
+BUNDLE_OBSERVABILITY="both" # with | without | both
+NODE_MAJOR="${NODE_MAJOR:-18}" # 18 | 22
+NODE_VARIANT="${NODE_VARIANT:-official}" # official | glibc217
+BUILD_FRONTEND=false
+APP_VERSION="${APP_VERSION:-}"
+
+PROMETHEUS_VERSION="${PROMETHEUS_VERSION:-3.9.1}"
+ALERTMANAGER_VERSION="${ALERTMANAGER_VERSION:-0.31.1}"
+GRAFANA_VERSION="${GRAFANA_VERSION:-12.3.3}"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/package-release.sh [options]
+
+Options:
+  --arch <amd64|arm64|all>          Target CPU arch for seatunnelx binary (default: amd64)
+  --bundle-observability <with|without|both>
+                                     Build package variant with/without bundled stack (default: both)
+  --node-major <18|22>               Bundle Node runtime major version for Next standalone (18 is recommended for CentOS 7)
+  --node-variant <official|glibc217> Node binary source variant (default: official)
+  --build-frontend                   Build frontend standalone before packaging
+  --version <string>                 Package version label (default: git describe --tags --always --dirty)
+  --output-dir <path>                Output directory for tar.gz files (default: dist/releases)
+  --cache-dir <path>                 Download/build cache dir (default: .cache/release)
+  --help                             Show this help
+
+Examples:
+  scripts/package-release.sh --arch all --bundle-observability both --node-major 18
+  scripts/package-release.sh --arch arm64 --bundle-observability without --node-major 22
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --arch)
+      ARCH_OPTION="${2:-}"
+      shift 2
+      ;;
+    --bundle-observability)
+      BUNDLE_OBSERVABILITY="${2:-}"
+      shift 2
+      ;;
+    --node-major)
+      NODE_MAJOR="${2:-}"
+      shift 2
+      ;;
+    --node-variant)
+      NODE_VARIANT="${2:-}"
+      shift 2
+      ;;
+    --build-frontend)
+      BUILD_FRONTEND=true
+      shift
+      ;;
+    --version)
+      APP_VERSION="${2:-}"
+      shift 2
+      ;;
+    --output-dir)
+      OUTPUT_DIR="${2:-}"
+      shift 2
+      ;;
+    --cache-dir)
+      CACHE_DIR="${2:-}"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "required command not found: $cmd"
+    exit 1
+  fi
+}
+
+for cmd in go tar curl python3; do
+  require_cmd "$cmd"
+done
+
+case "$NODE_MAJOR" in
+  18|22) ;;
+  *)
+    echo "invalid --node-major: $NODE_MAJOR (supported: 18, 22)"
+    exit 1
+    ;;
+esac
+
+case "$NODE_VARIANT" in
+  official|glibc217) ;;
+  *)
+    echo "invalid --node-variant: $NODE_VARIANT (supported: official, glibc217)"
+    exit 1
+    ;;
+esac
+
+if [[ "$NODE_MAJOR" == "22" && "$NODE_VARIANT" == "official" ]]; then
+  echo "WARN: Node 22 official binaries may not work on CentOS 7 (glibc too old)."
+  echo "      For CentOS 7, prefer --node-major 18 --node-variant glibc217."
+fi
+
+case "$ARCH_OPTION" in
+  amd64) ARCHES=("amd64") ;;
+  arm64) ARCHES=("arm64") ;;
+  all) ARCHES=("amd64" "arm64") ;;
+  *)
+    echo "invalid --arch: $ARCH_OPTION (supported: amd64, arm64, all)"
+    exit 1
+    ;;
+esac
+
+case "$BUNDLE_OBSERVABILITY" in
+  with) OBS_VARIANTS=("with") ;;
+  without) OBS_VARIANTS=("without") ;;
+  both) OBS_VARIANTS=("with" "without") ;;
+  *)
+    echo "invalid --bundle-observability: $BUNDLE_OBSERVABILITY (supported: with, without, both)"
+    exit 1
+    ;;
+esac
+
+if [[ -z "$APP_VERSION" ]]; then
+  APP_VERSION="$(git -C "$ROOT_DIR" describe --tags --always --dirty 2>/dev/null || date +%Y%m%d%H%M%S)"
+fi
+APP_VERSION_SAFE="$(echo "$APP_VERSION" | tr '/ ' '__')"
+
+DOWNLOAD_DIR="$CACHE_DIR/downloads"
+BUILD_DIR="$CACHE_DIR/build"
+STAGE_DIR="$CACHE_DIR/stage"
+
+mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$BUILD_DIR" "$STAGE_DIR"
+
+node_arch() {
+  case "$1" in
+    amd64) echo "x64" ;;
+    arm64) echo "arm64" ;;
+    *)
+      echo "unsupported arch: $1" >&2
+      exit 1
+      ;;
+  esac
+}
+
+resolve_host_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *)
+      echo "unsupported host arch: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+download_if_missing() {
+  local url="$1"
+  local output="$2"
+  if [[ -f "$output" ]]; then
+    return
+  fi
+  echo "downloading: $url" >&2
+  curl -fL --retry 3 --retry-delay 1 "$url" -o "$output"
+}
+
+resolve_latest_node_version() {
+  python3 - "$NODE_MAJOR" <<'PY'
+import json
+import sys
+import urllib.request
+
+major = sys.argv[1]
+data = json.load(urllib.request.urlopen("https://nodejs.org/dist/index.json", timeout=15))
+for item in data:
+    version = item["version"].lstrip("v")
+    if version.split(".")[0] == major:
+        print(version)
+        break
+else:
+    raise SystemExit(f"cannot resolve latest node version for major={major}")
+PY
+}
+
+NODE_VERSION="$(resolve_latest_node_version)"
+echo "resolved Node runtime version: v$NODE_VERSION (major=$NODE_MAJOR, variant=$NODE_VARIANT)"
+
+prepare_node_runtime() {
+  local arch="$1"
+  local node_arch_value
+  node_arch_value="$(node_arch "$arch")"
+
+  local cache_runtime_dir="$BUILD_DIR/node-runtime/v${NODE_VERSION}-${node_arch_value}-${NODE_VARIANT}"
+  if [[ -x "$cache_runtime_dir/bin/node" ]]; then
+    echo "$cache_runtime_dir"
+    return
+  fi
+
+  mkdir -p "$cache_runtime_dir"
+  local archive_name
+  local url
+  if [[ "$NODE_VARIANT" == "official" ]]; then
+    archive_name="node-v${NODE_VERSION}-linux-${node_arch_value}.tar.xz"
+    url="https://nodejs.org/dist/v${NODE_VERSION}/${archive_name}"
+  else
+    archive_name="node-v${NODE_VERSION}-linux-${node_arch_value}-glibc-217.tar.xz"
+    url="https://unofficial-builds.nodejs.org/download/release/v${NODE_VERSION}/${archive_name}"
+  fi
+
+  local archive_path="$DOWNLOAD_DIR/$archive_name"
+  download_if_missing "$url" "$archive_path"
+
+  local tmp_extract="$BUILD_DIR/tmp-node-${node_arch_value}-${NODE_VARIANT}"
+  rm -rf "$tmp_extract"
+  mkdir -p "$tmp_extract"
+  tar -xJf "$archive_path" -C "$tmp_extract"
+  local extracted
+  extracted="$(find "$tmp_extract" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+  if [[ -z "$extracted" ]]; then
+    echo "failed to extract node runtime: $archive_path"
+    exit 1
+  fi
+  rm -rf "$cache_runtime_dir"
+  mv "$extracted" "$cache_runtime_dir"
+  rm -rf "$tmp_extract"
+
+  if [[ ! -x "$cache_runtime_dir/bin/node" ]]; then
+    echo "node binary missing after extraction: $cache_runtime_dir/bin/node"
+    exit 1
+  fi
+  echo "$cache_runtime_dir"
+}
+
+build_frontend_standalone() {
+  local host_arch
+  host_arch="$(resolve_host_arch)"
+  local runtime_dir
+  runtime_dir="$(prepare_node_runtime "$host_arch")"
+
+  echo "building frontend standalone with Node v$NODE_VERSION ..."
+  (
+    cd "$ROOT_DIR/frontend"
+    export PATH="$runtime_dir/bin:$PATH"
+    export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    corepack enable >/dev/null 2>&1 || true
+    corepack prepare pnpm@10.10.0 --activate >/dev/null 2>&1 || true
+    pnpm install --no-frozen-lockfile
+    pnpm run pack:standalone
+  )
+}
+
+FRONTEND_DIST="$ROOT_DIR/frontend/dist-standalone"
+if [[ "$BUILD_FRONTEND" == "true" ]]; then
+  build_frontend_standalone
+fi
+if [[ ! -f "$FRONTEND_DIST/server.js" ]]; then
+  echo "frontend standalone not found: $FRONTEND_DIST/server.js"
+  echo "run with --build-frontend or build frontend manually."
+  exit 1
+fi
+
+build_seatunnelx_binary() {
+  local arch="$1"
+  local out="$BUILD_DIR/seatunnelx-linux-${arch}"
+  echo "building seatunnelx for linux/$arch ..."
+  (
+    cd "$ROOT_DIR"
+    GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -o "$out" .
+  )
+}
+
+build_agent_binaries() {
+  local out_amd64="$BUILD_DIR/seatunnelx-agent-linux-amd64"
+  local out_arm64="$BUILD_DIR/seatunnelx-agent-linux-arm64"
+
+  echo "building seatunnelx-agent for linux/amd64 ..."
+  (
+    cd "$ROOT_DIR/agent"
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$out_amd64" ./cmd/main.go
+  )
+  echo "building seatunnelx-agent for linux/arm64 ..."
+  (
+    cd "$ROOT_DIR/agent"
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "$out_arm64" ./cmd/main.go
+  )
+}
+
+build_agent_binaries
+for arch in "${ARCHES[@]}"; do
+  build_seatunnelx_binary "$arch"
+done
+
+prepare_observability_stack() {
+  local arch="$1"
+  local deps_dir="$2"
+  mkdir -p "$deps_dir"
+
+  local prom_archive="prometheus-${PROMETHEUS_VERSION}.linux-${arch}.tar.gz"
+  local prom_url="https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/${prom_archive}"
+  local prom_path="$DOWNLOAD_DIR/$prom_archive"
+  download_if_missing "$prom_url" "$prom_path"
+
+  local alert_archive="alertmanager-${ALERTMANAGER_VERSION}.linux-${arch}.tar.gz"
+  local alert_url="https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/${alert_archive}"
+  local alert_path="$DOWNLOAD_DIR/$alert_archive"
+  download_if_missing "$alert_url" "$alert_path"
+
+  local grafana_archive="grafana-${GRAFANA_VERSION}.linux-${arch}.tar.gz"
+  local grafana_url="https://dl.grafana.com/oss/release/${grafana_archive}"
+  local grafana_path="$DOWNLOAD_DIR/$grafana_archive"
+  download_if_missing "$grafana_url" "$grafana_path"
+
+  local tmp="$BUILD_DIR/tmp-observability-${arch}"
+  rm -rf "$tmp"
+  mkdir -p "$tmp"
+
+  tar -xzf "$prom_path" -C "$tmp"
+  local prom_dir
+  prom_dir="$(find "$tmp" -maxdepth 1 -type d -name "prometheus-*" | head -n1)"
+  rm -rf "$deps_dir/prometheus"
+  mkdir -p "$deps_dir/prometheus"
+  cp -a "$prom_dir"/. "$deps_dir/prometheus/"
+  rm -rf "$tmp"/*
+
+  tar -xzf "$alert_path" -C "$tmp"
+  local alert_dir
+  alert_dir="$(find "$tmp" -maxdepth 1 -type d -name "alertmanager-*" | head -n1)"
+  rm -rf "$deps_dir/alertmanager"
+  mkdir -p "$deps_dir/alertmanager"
+  cp -a "$alert_dir"/. "$deps_dir/alertmanager/"
+  rm -rf "$tmp"/*
+
+  tar -xzf "$grafana_path" -C "$tmp"
+  local grafana_dir
+  grafana_dir="$(find "$tmp" -maxdepth 1 -type d -name "grafana-*" | head -n1)"
+  rm -rf "$deps_dir/grafana"
+  mkdir -p "$deps_dir/grafana"
+  cp -a "$grafana_dir"/. "$deps_dir/grafana/"
+  rm -rf "$tmp"
+
+  cp "$ROOT_DIR/deps/init-observability-defaults.sh" "$deps_dir/"
+  cp "$ROOT_DIR/deps/start-observability.sh" "$deps_dir/"
+  cp "$ROOT_DIR/deps/stop-observability.sh" "$deps_dir/"
+  cp "$ROOT_DIR/deps/status-observability.sh" "$deps_dir/"
+  chmod +x \
+    "$deps_dir/init-observability-defaults.sh" \
+    "$deps_dir/start-observability.sh" \
+    "$deps_dir/stop-observability.sh" \
+    "$deps_dir/status-observability.sh"
+}
+
+patch_observability_config() {
+  local config_file="$1"
+  local mode="$2" # with|without
+
+  if [[ "$mode" == "with" ]]; then
+    sed -i \
+      -e 's/^  bundled_stack_enabled: .*/  bundled_stack_enabled: true/' \
+      -e 's/^    manage_config: .*/    manage_config: true/' \
+      "$config_file"
+  else
+    sed -i \
+      -e 's/^  bundled_stack_enabled: .*/  bundled_stack_enabled: false/' \
+      -e 's/^    manage_config: .*/    manage_config: false/' \
+      "$config_file"
+  fi
+}
+
+for arch in "${ARCHES[@]}"; do
+  for obs in "${OBS_VARIANTS[@]}"; do
+    pkg_name="seatunnelx-${APP_VERSION_SAFE}-linux-${arch}-node${NODE_MAJOR}-${obs}-observability"
+    pkg_dir="$STAGE_DIR/$pkg_name"
+    rm -rf "$pkg_dir"
+    mkdir -p "$pkg_dir"
+
+    echo "staging package: $pkg_name"
+
+    cp "$BUILD_DIR/seatunnelx-linux-${arch}" "$pkg_dir/seatunnelx"
+    chmod +x "$pkg_dir/seatunnelx"
+
+    cp "$ROOT_DIR/README.md" "$pkg_dir/"
+    cp "$ROOT_DIR/LICENSE" "$pkg_dir/"
+    cp "$ROOT_DIR/NOTICE" "$pkg_dir/"
+    cp "$ROOT_DIR/config.example.yaml" "$pkg_dir/config.example.yaml"
+    cp "$ROOT_DIR/config.example.yaml" "$pkg_dir/config.yaml"
+    cp "$ROOT_DIR/install_seatunnel.sh" "$pkg_dir/"
+
+    patch_observability_config "$pkg_dir/config.yaml" "$obs"
+
+    mkdir -p "$pkg_dir/lib/agent"
+    cp "$BUILD_DIR/seatunnelx-agent-linux-amd64" "$pkg_dir/lib/agent/seatunnelx-agent-linux-amd64"
+    cp "$BUILD_DIR/seatunnelx-agent-linux-arm64" "$pkg_dir/lib/agent/seatunnelx-agent-linux-arm64"
+    chmod +x "$pkg_dir/lib/agent/seatunnelx-agent-linux-amd64" "$pkg_dir/lib/agent/seatunnelx-agent-linux-arm64"
+
+    mkdir -p "$pkg_dir/frontend"
+    cp -a "$FRONTEND_DIST"/. "$pkg_dir/frontend/"
+
+    local_node_runtime="$(prepare_node_runtime "$arch")"
+    mkdir -p "$pkg_dir/runtime"
+    cp -a "$local_node_runtime" "$pkg_dir/runtime/node"
+
+    mkdir -p "$pkg_dir/bin" "$pkg_dir/logs" "$pkg_dir/run"
+    cp "$ROOT_DIR/support-files/release/start.sh" "$pkg_dir/bin/start.sh"
+    cp "$ROOT_DIR/support-files/release/stop.sh" "$pkg_dir/bin/stop.sh"
+    cp "$ROOT_DIR/support-files/release/status.sh" "$pkg_dir/bin/status.sh"
+    chmod +x "$pkg_dir/bin/start.sh" "$pkg_dir/bin/stop.sh" "$pkg_dir/bin/status.sh"
+
+    if [[ "$obs" == "with" ]]; then
+      prepare_observability_stack "$arch" "$pkg_dir/deps"
+    fi
+
+    cat >"$pkg_dir/BUILD_INFO" <<EOF
+version=$APP_VERSION_SAFE
+arch=$arch
+node_major=$NODE_MAJOR
+node_version=$NODE_VERSION
+node_variant=$NODE_VARIANT
+observability=$obs
+build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+
+    tarball="$OUTPUT_DIR/${pkg_name}.tar.gz"
+    tar -C "$STAGE_DIR" -czf "$tarball" "$pkg_name"
+    echo "created: $tarball"
+  done
+done
+
+echo
+echo "all done."
+echo "output dir: $OUTPUT_DIR"
