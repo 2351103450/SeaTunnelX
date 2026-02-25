@@ -4,6 +4,7 @@ import {useState, useEffect, useMemo, memo} from 'react';
 import {useTranslations} from 'next-intl';
 import {FloatingDock} from '@/components/ui/floating-dock';
 import {
+  Activity,
   BarChartIcon,
   User,
   LogOutIcon,
@@ -51,6 +52,7 @@ const StaticIcons = {
   package: <Package {...IconOptions} />,
   puzzle: <Puzzle {...IconOptions} />,
   dashboard: <LayoutDashboard {...IconOptions} />,
+  monitoring: <Activity {...IconOptions} />,
   divider: <div />,
 };
 
@@ -312,6 +314,13 @@ export function ManagementBar() {
       title: tDock('clusterManagement'),
       icon: StaticIcons.database,
       href: '/clusters',
+    });
+
+    // 监控中心入口 / Monitoring center entry
+    items.push({
+      title: tDock('monitoringCenter'),
+      icon: StaticIcons.monitoring,
+      href: '/monitoring',
     });
 
     // 安装包管理入口 / Package management entry

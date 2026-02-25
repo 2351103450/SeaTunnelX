@@ -9,6 +9,7 @@ import {installerService} from './installer/index';
 import {pluginService} from './plugin/index';
 import {ConfigService} from './config/index';
 import * as MonitorService from './monitor/index';
+import {MonitoringService} from './monitoring/index';
 import * as DiscoveryService from './discovery/index';
 
 /**
@@ -139,6 +140,12 @@ const services = {
    * Requirements: 5.1, 5.4, 6.4
    */
   monitor: MonitorService,
+
+  /**
+   * 监控中心服务
+   * Monitoring center service
+   */
+  monitoring: MonitoringService,
 
   /**
    * 集群发现服务
