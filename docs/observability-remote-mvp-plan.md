@@ -125,3 +125,32 @@
 2. `feat(config): add remote observability paths and startup validation`
 3. `feat(monitoring): add prometheus http-sd endpoint`
 4. `feat(monitoring): add alertmanager webhook ingest and persistence`
+
+---
+
+## 7. 实施日志（按步骤）
+
+> 说明：以下日志用于约束“按 MVP 设计推进”，避免偏离范围。
+
+- 2026-02-27 / Step-1（M1）  
+  完成远程集成基础能力：配置校验、HTTP SD、Alertmanager Webhook、告警落库去重。
+
+- 2026-02-27 / Step-2（M2）  
+  完成查询聚合 API：`/monitoring/remote-alerts`、`/clusters/health`、`/monitoring/platform-health`。
+
+- 2026-02-27 / Step-3（M3）  
+  完成接入文档与联调脚本：`observability-remote-integration-guide.md`、`observability-remote-smoke.sh`；  
+  固定交付中英文 Dashboard JSON 到 `deps/grafana_config/dashboards`。
+
+- 2026-02-27 / Step-4（M2 UI）  
+  监控中心前端完成平台健康摘要、集群健康表、远程告警列表对接。
+
+- 2026-02-27 / Step-5（M2 UI 增强）  
+  远程告警页增加时间过滤、分页、按 `cluster_id` URL 过滤；  
+  平台健康表增加跳转详情与跳转告警入口。
+
+### 当前严格 MVP 剩余项（下一步）
+
+- [ ] 在真实外部三件套环境完成一轮端到端联调记录（不是仅本地接口可用）；
+- [ ] 补齐兼容性/回归验证记录（开启与关闭 `observability.enabled` 两条路径）；
+- [ ] 将联调结果与排障结论沉淀回文档（本文件 + integration guide）。

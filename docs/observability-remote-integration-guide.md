@@ -118,3 +118,21 @@ SEATUNNELX_PASSWORD=admin \
 - `GET /api/v1/clusters/health`
 - `GET /api/v1/monitoring/platform-health`
 
+---
+
+## 7. 监控中心 UI（MVP）能力说明
+
+当前监控中心（以 Grafana 为主）对应 MVP 已支持：
+
+1. **平台健康摘要**
+   - 数据来源：`GET /api/v1/monitoring/platform-health`
+   - 展示总集群、健康/降级/异常集群、活动/严重告警
+
+2. **集群健康表**
+   - 数据来源：`GET /api/v1/clusters/health`
+   - 支持一键跳转到集群详情和告警页（带 `cluster_id` 过滤）
+
+3. **远程告警列表**
+   - 数据来源：`GET /api/v1/monitoring/remote-alerts`
+   - 支持筛选：`cluster_id`、`status`、`start_time`、`end_time`
+   - 支持分页：`page`、`page_size`
