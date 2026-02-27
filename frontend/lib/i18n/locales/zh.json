@@ -1341,7 +1341,14 @@
       "totalCount": "总数",
       "firingCount": "触发中",
       "resolvedCount": "已恢复",
-      "otherCount": "其他"
+      "otherCount": "其他",
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "clearTimeFilter": "清除时间",
+      "pageSize": "每页条数",
+      "prevPage": "上一页",
+      "nextPage": "下一页",
+      "pageInfo": "第 {current} / {total} 页"
     },
     "rules": {
       "entry": "告警规则",

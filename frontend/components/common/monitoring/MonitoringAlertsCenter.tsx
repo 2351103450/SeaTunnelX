@@ -8,6 +8,7 @@ import services from '@/lib/services';
 import type {RemoteAlertEvent} from '@/lib/services/monitoring';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
+import {Input} from '@/components/ui/input';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {
   Select,
@@ -48,6 +49,17 @@ function formatUnixSeconds(value?: number): string {
   return formatDateTime(new Date(value * 1000).toISOString());
 }
 
+function toRFC3339(value: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+  return parsed.toISOString();
+}
+
 function normalizeStatus(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -71,10 +83,19 @@ export function MonitoringAlertsCenter() {
   const [clusterOptions, setClusterOptions] = useState<ClusterOption[]>([]);
   const [clusterFilter, setClusterFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [startTimeFilter, setStartTimeFilter] = useState<string>('');
+  const [endTimeFilter, setEndTimeFilter] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<string>('50');
 
   const [alerts, setAlerts] = useState<RemoteAlertEvent[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+
+  const pageSizeNumber = useMemo(
+    () => Number.parseInt(pageSize, 10) || 50,
+    [pageSize],
+  );
 
   const loadClusters = useCallback(async () => {
     const healthResult = await services.monitoring.getClustersHealthSafe();
@@ -111,8 +132,10 @@ export function MonitoringAlertsCenter() {
       const result = await services.monitoring.getRemoteAlertsSafe({
         cluster_id: clusterFilter === 'all' ? undefined : clusterFilter,
         status: statusFilter === 'all' ? undefined : statusFilter,
-        page: 1,
-        page_size: 200,
+        start_time: toRFC3339(startTimeFilter),
+        end_time: toRFC3339(endTimeFilter),
+        page,
+        page_size: pageSizeNumber,
       });
 
       if (!result.success || !result.data) {
@@ -124,10 +147,21 @@ export function MonitoringAlertsCenter() {
 
       setAlerts(result.data.alerts || []);
       setTotal(result.data.total || 0);
+      if (result.data.page && result.data.page !== page) {
+        setPage(result.data.page);
+      }
     } finally {
       setLoading(false);
     }
-  }, [clusterFilter, statusFilter, t]);
+  }, [
+    clusterFilter,
+    statusFilter,
+    startTimeFilter,
+    endTimeFilter,
+    page,
+    pageSizeNumber,
+    t,
+  ]);
 
   useEffect(() => {
     loadClusters();
@@ -176,15 +210,28 @@ export function MonitoringAlertsCenter() {
     [t],
   );
 
+  const totalPages = useMemo(() => {
+    if (total <= 0) {
+      return 1;
+    }
+    return Math.max(1, Math.ceil(total / pageSizeNumber));
+  }, [total, pageSizeNumber]);
+
   return (
     <div className='space-y-4'>
       <Card>
         <CardHeader>
           <CardTitle>{t('alerts.title')}</CardTitle>
           <div className='flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between'>
-            <div className='flex flex-col gap-2 md:flex-row'>
+            <div className='flex flex-col gap-2 md:flex-row md:flex-wrap'>
               <div className='w-full md:w-56'>
-                <Select value={clusterFilter} onValueChange={setClusterFilter}>
+                <Select
+                  value={clusterFilter}
+                  onValueChange={(value) => {
+                    setClusterFilter(value);
+                    setPage(1);
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder={t('alerts.clusterFilter')} />
                   </SelectTrigger>
@@ -202,7 +249,13 @@ export function MonitoringAlertsCenter() {
               </div>
 
               <div className='w-full md:w-56'>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    setStatusFilter(value);
+                    setPage(1);
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder={t('alerts.statusFilter')} />
                   </SelectTrigger>
@@ -217,9 +270,45 @@ export function MonitoringAlertsCenter() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className='w-full md:w-64'>
+                <Input
+                  type='datetime-local'
+                  value={startTimeFilter}
+                  onChange={(event) => {
+                    setStartTimeFilter(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder={t('alerts.startTime')}
+                />
+              </div>
+
+              <div className='w-full md:w-64'>
+                <Input
+                  type='datetime-local'
+                  value={endTimeFilter}
+                  onChange={(event) => {
+                    setEndTimeFilter(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder={t('alerts.endTime')}
+                />
+              </div>
+
+              <Button
+                variant='outline'
+                onClick={() => {
+                  setStartTimeFilter('');
+                  setEndTimeFilter('');
+                  setPage(1);
+                }}
+                disabled={!startTimeFilter && !endTimeFilter}
+              >
+                {t('alerts.clearTimeFilter')}
+              </Button>
             </div>
 
-            <div className='flex items-center gap-2'>
+            <div className='flex flex-wrap items-center gap-2'>
               <Badge variant='outline'>{`${t('alerts.totalCount')}: ${total}`}</Badge>
               <Badge variant='destructive'>{`${t('alerts.firingCount')}: ${alertStats.firing}`}</Badge>
               <Badge variant='secondary'>{`${t('alerts.resolvedCount')}: ${alertStats.resolved}`}</Badge>
@@ -294,6 +383,53 @@ export function MonitoringAlertsCenter() {
               )}
             </TableBody>
           </Table>
+
+          <div className='mt-4 flex flex-col gap-2 border-t pt-4 md:flex-row md:items-center md:justify-between'>
+            <div className='flex items-center gap-2'>
+              <span className='text-sm text-muted-foreground'>
+                {t('alerts.pageSize')}
+              </span>
+              <Select
+                value={pageSize}
+                onValueChange={(value) => {
+                  setPageSize(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className='w-24'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='20'>20</SelectItem>
+                  <SelectItem value='50'>50</SelectItem>
+                  <SelectItem value='100'>100</SelectItem>
+                  <SelectItem value='200'>200</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className='flex items-center gap-2'>
+              <Button
+                variant='outline'
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={loading || page <= 1}
+              >
+                {t('alerts.prevPage')}
+              </Button>
+              <span className='text-sm text-muted-foreground'>
+                {t('alerts.pageInfo', {current: page, total: totalPages})}
+              </span>
+              <Button
+                variant='outline'
+                onClick={() =>
+                  setPage((prev) => Math.min(totalPages, prev + 1))
+                }
+                disabled={loading || page >= totalPages}
+              >
+                {t('alerts.nextPage')}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

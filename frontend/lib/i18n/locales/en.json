@@ -1341,7 +1341,14 @@
       "totalCount": "Total",
       "firingCount": "Firing",
       "resolvedCount": "Resolved",
-      "otherCount": "Others"
+      "otherCount": "Others",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "clearTimeFilter": "Clear Time",
+      "pageSize": "Page Size",
+      "prevPage": "Previous",
+      "nextPage": "Next",
+      "pageInfo": "Page {current} / {total}"
     },
     "rules": {
       "entry": "Alert Rules",
