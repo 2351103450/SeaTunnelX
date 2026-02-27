@@ -24,6 +24,7 @@ import (
 
 	"github.com/seatunnel/seatunnelX/internal/apps/monitor"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // AlertEventQueryFilter defines query options for alert events.
@@ -266,4 +267,38 @@ func (r *Repository) SaveNotificationChannel(ctx context.Context, channel *Notif
 // DeleteNotificationChannel 根据 ID 删除通知渠道。
 func (r *Repository) DeleteNotificationChannel(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&NotificationChannel{}, id).Error
+}
+
+// UpsertRemoteAlert creates or updates one normalized remote alert record.
+// UpsertRemoteAlert 创建或更新一条标准化远程告警记录。
+func (r *Repository) UpsertRemoteAlert(ctx context.Context, record *RemoteAlertRecord) error {
+	if record == nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "fingerprint"},
+				{Name: "starts_at"},
+			},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"status":           record.Status,
+				"receiver":         record.Receiver,
+				"alert_name":       record.AlertName,
+				"severity":         record.Severity,
+				"cluster_id":       record.ClusterID,
+				"cluster_name":     record.ClusterName,
+				"env":              record.Env,
+				"generator_url":    record.GeneratorURL,
+				"summary":          record.Summary,
+				"description":      record.Description,
+				"labels_json":      record.LabelsJSON,
+				"annotations_json": record.AnnotationsJSON,
+				"ends_at":          record.EndsAt,
+				"resolved_at":      record.ResolvedAt,
+				"last_received_at": record.LastReceivedAt,
+				"updated_at":       time.Now().UTC(),
+			}),
+		}).
+		Create(record).Error
 }

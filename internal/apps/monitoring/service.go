@@ -686,6 +686,7 @@ func (s *Service) SyncManagedClusterTargets(ctx context.Context) error {
 type managedMetricsTarget struct {
 	ClusterID   uint
 	ClusterName string
+	Env         string
 	Target      string
 	ProbeURL    string
 	StatusCode  int
@@ -729,6 +730,7 @@ func (s *Service) collectManagedMetricsTargets(ctx context.Context, doProbe bool
 			item := &managedMetricsTarget{
 				ClusterID:   c.ID,
 				ClusterName: strings.TrimSpace(c.Name),
+				Env:         resolveClusterEnvLabel(c),
 				Target:      target,
 			}
 			if doProbe {
@@ -755,6 +757,7 @@ func (s *Service) collectManagedMetricsTargets(ctx context.Context, doProbe bool
 		item := &managedMetricsTarget{
 			ClusterID:   0,
 			ClusterName: "static",
+			Env:         "static",
 			Target:      target,
 		}
 		if doProbe {
@@ -1335,6 +1338,21 @@ func defaultRuleByKey(clusterID uint, ruleKey string) *AlertRule {
 		}
 	}
 	return nil
+}
+
+func resolveClusterEnvLabel(c *cluster.Cluster) string {
+	if c == nil || c.Config == nil {
+		return "unknown"
+	}
+	for _, key := range []string{"env", "environment"} {
+		if raw, ok := c.Config[key]; ok && raw != nil {
+			value := strings.TrimSpace(fmt.Sprintf("%v", raw))
+			if value != "" {
+				return value
+			}
+		}
+	}
+	return "unknown"
 }
 
 func isDuplicateKeyError(err error) bool {

@@ -318,6 +318,15 @@ func Serve() {
 			monitoringService := monitoringapp.NewService(clusterService, monitorService, monitoringRepo)
 			monitoringHandler := monitoringapp.NewHandler(monitoringService)
 
+			// Public remote-observability integration endpoints (no login required).
+			// 远程可观测集成公开接口（无需登录）。
+			if config.Config.Observability.Enabled {
+				promDiscoveryPath := normalizeAPIV1RoutePath(config.Config.Observability.Prometheus.HTTPSDPath, "/monitoring/prometheus/discovery")
+				alertWebhookPath := normalizeAPIV1RoutePath(config.Config.Observability.Alertmanager.WebhookPath, "/monitoring/alertmanager/webhook")
+				apiV1Router.GET(promDiscoveryPath, monitoringHandler.GetPrometheusDiscovery)
+				apiV1Router.POST(alertWebhookPath, monitoringHandler.AlertmanagerWebhook)
+			}
+
 			// Cluster topology change hook -> auto sync managed Prometheus targets (best effort).
 			// 集群拓扑变更后自动同步 Prometheus 受管抓取目标（尽力而为）。
 			clusterService.SetOnClusterTopologyChanged(func(ctx context.Context, clusterID uint) {
@@ -1643,4 +1652,24 @@ func (a *grpcClusterNodeProviderAdapter) RefreshClusterStatusFromNodes(ctx conte
 // GetClusterNodeDisplayInfo 返回集群名及节点展示，用于审计资源名称。
 func (a *grpcClusterNodeProviderAdapter) GetClusterNodeDisplayInfo(ctx context.Context, clusterID, nodeID uint) (clusterName, nodeDisplay string) {
 	return a.clusterService.GetClusterNodeDisplayInfo(ctx, clusterID, nodeID)
+}
+
+func normalizeAPIV1RoutePath(rawPath, fallback string) string {
+	path := strings.TrimSpace(rawPath)
+	if path == "" {
+		path = fallback
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	// Support both full path (/api/v1/...) and api-v1-relative path (/monitoring/...).
+	// 同时支持完整路径（/api/v1/...）和 v1 相对路径（/monitoring/...）。
+	if strings.HasPrefix(path, "/api/v1/") {
+		path = strings.TrimPrefix(path, "/api/v1")
+		if path == "" {
+			path = "/"
+		}
+	}
+	return path
 }

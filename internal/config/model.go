@@ -268,6 +268,10 @@ type ObservabilityConfig struct {
 type ObservabilityPrometheusConfig struct {
 	URL string `mapstructure:"url"`
 
+	// HTTPSDPath is the fixed HTTP SD endpoint path exposed by SeaTunnelX.
+	// HTTPSDPath 是 SeaTunnelX 暴露的 Prometheus HTTP SD 路径。
+	HTTPSDPath string `mapstructure:"http_sd_path"`
+
 	// ManageConfig indicates whether SeaTunnelX can rewrite Prometheus config file and trigger reload.
 	// ManageConfig 表示 SeaTunnelX 是否可改写 Prometheus 配置并触发热加载。
 	ManageConfig bool `mapstructure:"manage_config"`
@@ -295,6 +299,10 @@ type ObservabilityPrometheusConfig struct {
 // ObservabilityAlertmanagerConfig Alertmanager 集成配置
 type ObservabilityAlertmanagerConfig struct {
 	URL string `mapstructure:"url"`
+
+	// WebhookPath is the fixed Alertmanager webhook path exposed by SeaTunnelX.
+	// WebhookPath 是 SeaTunnelX 暴露的 Alertmanager Webhook 路径。
+	WebhookPath string `mapstructure:"webhook_path"`
 }
 
 // ObservabilityGrafanaConfig Grafana 集成配置

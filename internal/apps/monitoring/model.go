@@ -399,3 +399,44 @@ func (r *UpsertNotificationChannelRequest) Validate() error {
 	}
 	return nil
 }
+
+// PrometheusSDTargetGroup is one target group in Prometheus HTTP SD response.
+// PrometheusSDTargetGroup 是 Prometheus HTTP SD 响应中的目标组。
+type PrometheusSDTargetGroup struct {
+	Targets []string          `json:"targets"`
+	Labels  map[string]string `json:"labels,omitempty"`
+}
+
+// AlertmanagerWebhookPayload represents Alertmanager webhook body.
+// AlertmanagerWebhookPayload 表示 Alertmanager webhook 请求体。
+type AlertmanagerWebhookPayload struct {
+	Version           string            `json:"version"`
+	GroupKey          string            `json:"groupKey"`
+	Status            string            `json:"status"`
+	Receiver          string            `json:"receiver"`
+	GroupLabels       map[string]string `json:"groupLabels"`
+	CommonLabels      map[string]string `json:"commonLabels"`
+	CommonAnnotations map[string]string `json:"commonAnnotations"`
+	ExternalURL       string            `json:"externalURL"`
+	Alerts            []*WebhookAlert   `json:"alerts"`
+}
+
+// WebhookAlert represents one alert item in webhook payload.
+// WebhookAlert 表示 webhook 中的单条告警。
+type WebhookAlert struct {
+	Status       string            `json:"status"`
+	Labels       map[string]string `json:"labels"`
+	Annotations  map[string]string `json:"annotations"`
+	StartsAt     time.Time         `json:"startsAt"`
+	EndsAt       time.Time         `json:"endsAt"`
+	GeneratorURL string            `json:"generatorURL"`
+	Fingerprint  string            `json:"fingerprint"`
+}
+
+// AlertmanagerWebhookResult represents processing result for one webhook request.
+// AlertmanagerWebhookResult 表示单次 webhook 处理结果。
+type AlertmanagerWebhookResult struct {
+	Received int      `json:"received"`
+	Stored   int      `json:"stored"`
+	Errors   []string `json:"errors,omitempty"`
+}

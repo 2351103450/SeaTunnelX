@@ -18,6 +18,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -60,6 +61,11 @@ func init() {
 
 	// 设置默认值
 	setDefaults(&c)
+	if os.Getenv("GO_TEST") != "1" && !isTestEnvironment() {
+		if err := validateConfig(&c); err != nil {
+			log.Fatalf("[Config] validate config failed: %v\n", err)
+		}
+	}
 
 	// 设置全局配置
 	Config = &c
@@ -149,8 +155,14 @@ func setDefaults(c *configModel) {
 	if c.Observability.Prometheus.URL == "" {
 		c.Observability.Prometheus.URL = "http://127.0.0.1:9090"
 	}
+	if c.Observability.Prometheus.HTTPSDPath == "" {
+		c.Observability.Prometheus.HTTPSDPath = "/api/v1/monitoring/prometheus/discovery"
+	}
 	if c.Observability.Alertmanager.URL == "" {
 		c.Observability.Alertmanager.URL = "http://127.0.0.1:9093"
+	}
+	if c.Observability.Alertmanager.WebhookPath == "" {
+		c.Observability.Alertmanager.WebhookPath = "/api/v1/monitoring/alertmanager/webhook"
 	}
 	if c.Observability.Grafana.URL == "" {
 		c.Observability.Grafana.URL = "http://127.0.0.1:3000"
@@ -199,6 +211,72 @@ func setDefaults(c *configModel) {
 	if c.Observability.SeatunnelMetric.ProbeTimeoutSeconds <= 0 {
 		c.Observability.SeatunnelMetric.ProbeTimeoutSeconds = 2
 	}
+}
+
+func validateConfig(c *configModel) error {
+	if c == nil {
+		return nil
+	}
+	if !c.Observability.Enabled {
+		return nil
+	}
+
+	if err := validateRequiredHTTPURL("app.external_url", c.App.ExternalURL); err != nil {
+		return err
+	}
+	if err := validateOptionalHTTPURL("observability.prometheus.url", c.Observability.Prometheus.URL); err != nil {
+		return err
+	}
+	if err := validateOptionalHTTPURL("observability.alertmanager.url", c.Observability.Alertmanager.URL); err != nil {
+		return err
+	}
+	if err := validateOptionalHTTPURL("observability.grafana.url", c.Observability.Grafana.URL); err != nil {
+		return err
+	}
+	if err := validateRequiredPath("observability.prometheus.http_sd_path", c.Observability.Prometheus.HTTPSDPath); err != nil {
+		return err
+	}
+	if err := validateRequiredPath("observability.alertmanager.webhook_path", c.Observability.Alertmanager.WebhookPath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateRequiredHTTPURL(name, raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fmt.Errorf("%s is required when observability.enabled=true", name)
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("%s parse failed: %w", name, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%s must start with http:// or https://", name)
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return fmt.Errorf("%s must include host", name)
+	}
+	return nil
+}
+
+func validateOptionalHTTPURL(name, raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	return validateRequiredHTTPURL(name, trimmed)
+}
+
+func validateRequiredPath(name, raw string) error {
+	path := strings.TrimSpace(raw)
+	if path == "" {
+		return fmt.Errorf("%s is required when observability.enabled=true", name)
+	}
+	if !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("%s must start with '/'", name)
+	}
+	return nil
 }
 
 func resolveHostPort(rawURL, fallback string) string {

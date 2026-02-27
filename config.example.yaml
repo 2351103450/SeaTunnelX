@@ -195,36 +195,33 @@ telemetry:
 # 可观测配置（三件套集成）
 # Observability configuration (Prometheus/Grafana/Alertmanager integration)
 observability:
-  # 总开关：关闭后监控中心集成状态只展示 disabled
-  # Master switch: when false, integration status will show disabled
+  # 总开关：关闭后不暴露远程集成接口（HTTP SD / Webhook）
+  # Master switch: when false, remote integration endpoints are disabled
   enabled: true
-  # 当前安装包是否内置三件套（有/无三件套安装包切换此项）
-  # Whether this installation package bundles monitoring stack binaries
-  bundled_stack_enabled: true
-  # 注册/安装集群后自动纳入监控（自动发现集群节点 metrics 端点）
-  # Auto-onboard managed clusters by discovering metrics endpoints
-  auto_onboard_clusters: true
 
   prometheus:
-    # Prometheus 访问地址（用于状态检查）
-    # Prometheus base URL (for health check)
+    # Prometheus Web/Query 地址（用于健康检查与控制台跳转）
+    # Prometheus Web/Query URL (for health checks and console links)
     url: "http://127.0.0.1:9090"
-    # 是否允许 SeaTunnelX 改写 Prometheus 配置并触发 reload
-    # Whether SeaTunnelX can rewrite Prometheus config and trigger reload
-    manage_config: true
-    # manage_config=true 时生效
-    # Effective only when manage_config=true
+    # SeaTunnelX 对外暴露的 HTTP SD 路径
+    # HTTP SD path exposed by SeaTunnelX
+    http_sd_path: "/api/v1/monitoring/prometheus/discovery"
+
+    # 以下字段来自本地一体化历史模式（远程集成模式可不配置）
+    # Legacy fields from bundled-stack mode (optional in remote integration mode)
+    manage_config: false
     config_file: "./deps/runtime/prometheus/prometheus.yml"
     reload_url: "http://127.0.0.1:9090/-/reload"
     rules_glob: "./deps/runtime/prometheus/rules/*.yml"
     scrape_interval: "15s"
     evaluation_interval: "15s"
-    # Prometheus 中 alertmanagers.targets 的地址（host:port）
-    # Alertmanager target address in Prometheus alerting config (host:port)
     alertmanager_target: "127.0.0.1:9093"
 
   alertmanager:
     url: "http://127.0.0.1:9093"
+    # SeaTunnelX 对外暴露的 Alertmanager Webhook 路径
+    # Alertmanager webhook path exposed by SeaTunnelX
+    webhook_path: "/api/v1/monitoring/alertmanager/webhook"
 
   grafana:
     url: "http://127.0.0.1:3000"
@@ -233,8 +230,8 @@ observability:
     # SeaTunnel metrics path，用于探测是否开启指标推送
     # SeaTunnel metrics path, used to verify metrics is really enabled
     path: "/metrics"
-    # 静态抓取目标（host:port）。用于未纳管集群或外部集群快速接入
-    # Static scrape targets (host:port) for unmanaged/external clusters
+    # 静态抓取目标（host:port），用于补充非纳管节点
+    # Static scrape targets (host:port) for extra unmanaged targets
     static_targets:
       - "127.0.0.1:8081"
     probe_timeout_seconds: 2

@@ -104,3 +104,39 @@ type NotificationChannel struct {
 func (NotificationChannel) TableName() string {
 	return "monitoring_notification_channels"
 }
+
+// RemoteAlertRecord stores one Alertmanager webhook alert after normalization.
+// RemoteAlertRecord 保存标准化后的 Alertmanager webhook 告警记录。
+type RemoteAlertRecord struct {
+	ID uint `json:"id" gorm:"primaryKey;autoIncrement"`
+
+	Fingerprint string `json:"fingerprint" gorm:"size:255;not null;index;uniqueIndex:ux_monitoring_remote_alert"`
+	StartsAt    int64  `json:"starts_at" gorm:"not null;index;uniqueIndex:ux_monitoring_remote_alert"`
+
+	Status      string `json:"status" gorm:"size:32;index"`
+	Receiver    string `json:"receiver" gorm:"size:200"`
+	AlertName   string `json:"alert_name" gorm:"size:255;index"`
+	Severity    string `json:"severity" gorm:"size:64;index"`
+	ClusterID   string `json:"cluster_id" gorm:"size:64;index"`
+	ClusterName string `json:"cluster_name" gorm:"size:255;index"`
+	Env         string `json:"env" gorm:"size:64;index"`
+
+	GeneratorURL string `json:"generator_url" gorm:"size:1024"`
+	Summary      string `json:"summary" gorm:"type:text"`
+	Description  string `json:"description" gorm:"type:text"`
+
+	LabelsJSON      string `json:"labels_json" gorm:"type:text"`
+	AnnotationsJSON string `json:"annotations_json" gorm:"type:text"`
+
+	EndsAt         int64      `json:"ends_at"`
+	ResolvedAt     *time.Time `json:"resolved_at"`
+	LastReceivedAt time.Time  `json:"last_received_at" gorm:"index"`
+	CreatedAt      time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt      time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName specifies table name for RemoteAlertRecord.
+// TableName 指定 RemoteAlertRecord 表名。
+func (RemoteAlertRecord) TableName() string {
+	return "monitoring_remote_alerts"
+}
