@@ -1,6 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import Link from 'next/link';
 import {useTranslations} from 'next-intl';
 import {useTheme} from 'next-themes';
 import {ExternalLink, Loader2, RefreshCw} from 'lucide-react';
@@ -360,13 +361,14 @@ export function MonitoringOverview() {
                       <TableHead>{t('nodes')}</TableHead>
                       <TableHead>{t('activeAlerts')}</TableHead>
                       <TableHead>{t('criticalAlerts')}</TableHead>
+                      <TableHead>{t('actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {!clusterHealth.length ? (
                       <TableRow>
                         <TableCell
-                          colSpan={5}
+                          colSpan={6}
                           className='text-center text-muted-foreground'
                         >
                           {t('noClusters')}
@@ -388,6 +390,15 @@ export function MonitoringOverview() {
                           <TableCell>{`${cluster.online_nodes}/${cluster.total_nodes}`}</TableCell>
                           <TableCell>{cluster.active_alerts}</TableCell>
                           <TableCell>{cluster.critical_alerts}</TableCell>
+                          <TableCell>
+                            <Button asChild size='sm' variant='outline'>
+                              <Link
+                                href={`/monitoring/clusters/${cluster.cluster_id}`}
+                              >
+                                {t('viewDetails')}
+                              </Link>
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
