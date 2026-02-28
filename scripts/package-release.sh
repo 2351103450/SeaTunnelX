@@ -35,8 +35,8 @@ Options:
   --help                             Show this help
 
 Examples:
-  scripts/package-release.sh --arch all --bundle-observability both --node-major 18
-  scripts/package-release.sh --arch arm64 --bundle-observability without --node-major 22
+  scripts/package-release.sh --arch all --bundle-observability both --node-major 22 --node-variant official
+  scripts/package-release.sh --arch all --bundle-observability both --node-major 22 --node-variant glibc217
 EOF
 }
 
@@ -183,20 +183,27 @@ download_if_missing() {
 }
 
 resolve_latest_node_version() {
-  python3 - "$NODE_MAJOR" <<'PY'
+  python3 - "$NODE_MAJOR" "$NODE_VARIANT" <<'PY'
 import json
 import sys
 import urllib.request
 
 major = sys.argv[1]
-data = json.load(urllib.request.urlopen("https://nodejs.org/dist/index.json", timeout=15))
+variant = sys.argv[2]
+index_url = "https://nodejs.org/dist/index.json"
+if variant == "glibc217":
+    index_url = "https://unofficial-builds.nodejs.org/download/release/index.json"
+
+data = json.load(urllib.request.urlopen(index_url, timeout=15))
 for item in data:
     version = item["version"].lstrip("v")
     if version.split(".")[0] == major:
         print(version)
         break
 else:
-    raise SystemExit(f"cannot resolve latest node version for major={major}")
+    raise SystemExit(
+        f"cannot resolve latest node version for major={major}, variant={variant}"
+    )
 PY
 }
 
@@ -369,7 +376,7 @@ prepare_observability_stack() {
 
 for arch in "${ARCHES[@]}"; do
   for obs in "${OBS_VARIANTS[@]}"; do
-    pkg_name="seatunnelx-${APP_VERSION_SAFE}-linux-${arch}-node${NODE_MAJOR}-${obs}-observability"
+    pkg_name="seatunnelx-${APP_VERSION_SAFE}-linux-${arch}-node${NODE_MAJOR}-${NODE_VARIANT}-${obs}-observability"
     pkg_dir="$STAGE_DIR/$pkg_name"
     rm -rf "$pkg_dir"
     mkdir -p "$pkg_dir"
@@ -384,7 +391,7 @@ for arch in "${ARCHES[@]}"; do
     cp "$ROOT_DIR/NOTICE" "$pkg_dir/"
     cp "$ROOT_DIR/config.example.yaml" "$pkg_dir/config.example.yaml"
     cp "$ROOT_DIR/config.example.yaml" "$pkg_dir/config.yaml"
-    cp "$ROOT_DIR/install_seatunnel.sh" "$pkg_dir/"
+    cp "$ROOT_DIR/support-files/release/install.sh" "$pkg_dir/install.sh"
 
     mkdir -p "$pkg_dir/lib/agent"
     cp "$BUILD_DIR/seatunnelx-agent-linux-amd64" "$pkg_dir/lib/agent/seatunnelx-agent-linux-amd64"
@@ -402,7 +409,7 @@ for arch in "${ARCHES[@]}"; do
     cp "$ROOT_DIR/support-files/release/start.sh" "$pkg_dir/bin/start.sh"
     cp "$ROOT_DIR/support-files/release/stop.sh" "$pkg_dir/bin/stop.sh"
     cp "$ROOT_DIR/support-files/release/status.sh" "$pkg_dir/bin/status.sh"
-    chmod +x "$pkg_dir/bin/start.sh" "$pkg_dir/bin/stop.sh" "$pkg_dir/bin/status.sh"
+    chmod +x "$pkg_dir/install.sh" "$pkg_dir/bin/start.sh" "$pkg_dir/bin/stop.sh" "$pkg_dir/bin/status.sh"
 
     if [[ "$obs" == "with" ]]; then
       prepare_observability_stack "$arch" "$pkg_dir/deps"

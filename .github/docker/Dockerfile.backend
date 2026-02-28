@@ -1,0 +1,27 @@
+FROM golang:1.24-bookworm AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/seatunnelx .
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/seatunnelx
+
+COPY --from=builder /out/seatunnelx /opt/seatunnelx/seatunnelx
+COPY config.example.yaml /opt/seatunnelx/config.yaml
+
+EXPOSE 8000 9000
+
+ENTRYPOINT ["/opt/seatunnelx/seatunnelx", "api"]
