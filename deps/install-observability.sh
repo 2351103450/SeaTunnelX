@@ -4,15 +4,11 @@ set -euo pipefail
 #
 # install-observability.sh
 #
-# 安装 Prometheus / Alertmanager / Grafana 三件套（仅解压，不 init、不 start）。
+# 安装并初始化/启动 Prometheus / Alertmanager / Grafana 三件套。
 #
 # 行为约定：
 # - 优先使用离线包（deps/downloads 下的三个 tar.gz），缺失则走在线下载。
 # - 在线下载：Prometheus/Alertmanager 优先走 GitHub 代理，Grafana 直接连官方源（代理不支持）。
-#
-# 安装后需手动执行：
-#   ./init-observability-defaults.sh   # 生成配置
-#   ./start-observability.sh           # 启动服务
 #
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -102,8 +98,10 @@ install_component_from_tar() {
     exit 1
   fi
 
-  # 清理旧目录
-  rm -rf "$BASE_DIR/$target_name"
+  local target_path="$BASE_DIR/$target_name"
+
+  # 清理旧的目标目录
+  rm -rf "$target_path"
 
   # 解压到 BASE_DIR
   log "Extracting $archive to $BASE_DIR"
@@ -116,7 +114,13 @@ install_component_from_tar() {
     exit 1
   fi
 
-  mv "$extracted_dir" "$BASE_DIR/$target_name"
+  # 如果解压目录名已经等于目标目录名，则无需再移动
+  if [[ "$extracted_dir" == "$target_path" ]]; then
+    log "Extracted directory already at target: $target_path"
+    return 0
+  fi
+
+  mv "$extracted_dir" "$target_path"
 }
 
 main() {
@@ -147,9 +151,12 @@ main() {
   log "  - $BASE_DIR/alertmanager-${ALERTMANAGER_VERSION}"
   log "  - $BASE_DIR/grafana-${GRAFANA_VERSION}"
   log ""
-  log "Next steps:"
-  log "  ./init-observability-defaults.sh   # 生成配置"
-  log "  ./start-observability.sh           # 启动服务"
+
+  log "Running init-observability-defaults.sh..."
+  "$BASE_DIR/init-observability-defaults.sh"
+
+  log "Starting observability stack via start-observability.sh..."
+  "$BASE_DIR/start-observability.sh"
 }
 
 main "$@"
