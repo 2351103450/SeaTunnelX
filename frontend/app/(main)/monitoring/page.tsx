@@ -8,15 +8,13 @@ import {Metadata} from 'next';
 import {MonitoringCenterWorkspace} from '@/components/common/monitoring';
 
 export const metadata: Metadata = {
-  title: '监控中心',
+  title: '告警中心',
 };
 
 export default function MonitoringPage() {
   return (
-    <div className='w-full max-w-none px-3 sm:px-4 lg:px-6 xl:px-8 2xl:px-10 py-6'>
-      <Suspense>
-        <MonitoringCenterWorkspace />
-      </Suspense>
-    </div>
+    <Suspense>
+      <MonitoringCenterWorkspace />
+    </Suspense>
   );
 }

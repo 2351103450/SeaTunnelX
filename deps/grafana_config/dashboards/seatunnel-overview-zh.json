@@ -21,8 +21,8 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "query": "label_values(node_state{job=\"seatunnel_engine_http\"},cluster)",
-        "definition": "label_values(node_state{job=\"seatunnel_engine_http\"},cluster)",
+        "query": "label_values(node_state{job=\"seatunnel_engine_http\"},cluster_name)",
+        "definition": "label_values(node_state{job=\"seatunnel_engine_http\"},cluster_name)",
         "refresh": 1,
         "includeAll": true,
         "multi": true,
@@ -41,8 +41,8 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "query": "label_values(node_state{job=\"seatunnel_engine_http\",cluster=~\"$cluster\"},instance)",
-        "definition": "label_values(node_state{job=\"seatunnel_engine_http\",cluster=~\"$cluster\"},instance)",
+        "query": "label_values(node_state{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\"},instance)",
+        "definition": "label_values(node_state{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\"},instance)",
         "refresh": 1,
         "includeAll": true,
         "multi": true,
@@ -89,7 +89,7 @@
       },
       "targets": [
         {
-          "expr": "min(up{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "min(up{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "refId": "A"
         }
       ],
@@ -156,7 +156,7 @@
       },
       "targets": [
         {
-          "expr": "min(node_state{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "min(node_state{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "refId": "A"
         }
       ],
@@ -223,7 +223,7 @@
       },
       "targets": [
         {
-          "expr": "min(hazelcast_partition_isClusterSafe{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "min(hazelcast_partition_isClusterSafe{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "refId": "A"
         }
       ],
@@ -290,7 +290,7 @@
       },
       "targets": [
         {
-          "expr": "min(hazelcast_partition_isLocalMemberSafe{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "min(hazelcast_partition_isLocalMemberSafe{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "refId": "A"
         }
       ],
@@ -357,7 +357,7 @@
       },
       "targets": [
         {
-          "expr": "max(jvm_threads_deadlocked{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "max(jvm_threads_deadlocked{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "refId": "A"
         }
       ],
@@ -411,7 +411,7 @@
       },
       "targets": [
         {
-          "expr": "max(seatunnel:fd_usage_percent{cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "max(seatunnel:fd_usage_percent{cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "refId": "A"
         }
       ],
@@ -469,7 +469,7 @@
       },
       "targets": [
         {
-          "expr": "sum(job_count{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",type=\"running\"})",
+          "expr": "sum(job_count{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",type=\"running\"})",
           "refId": "A"
         }
       ],
@@ -510,7 +510,7 @@
       },
       "targets": [
         {
-          "expr": "sum(job_count{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",type=~\"failing|failed\"})",
+          "expr": "sum(job_count{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",type=~\"failing|failed\"})",
           "refId": "A"
         }
       ],
@@ -581,12 +581,12 @@
       },
       "targets": [
         {
-          "expr": "100 * rate(process_cpu_seconds_total{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}[5m])",
+          "expr": "100 * rate(process_cpu_seconds_total{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}[5m])",
           "legendFormat": "cpu %",
           "refId": "A"
         },
         {
-          "expr": "100 * process_open_fds{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"} / clamp_min(process_max_fds{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}, 1)",
+          "expr": "100 * process_open_fds{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"} / clamp_min(process_max_fds{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}, 1)",
           "legendFormat": "fd usage %",
           "refId": "B"
         }
@@ -637,17 +637,17 @@
       },
       "targets": [
         {
-          "expr": "100 * jvm_memory_bytes_used{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",area=\"heap\"} / clamp_min(jvm_memory_bytes_max{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",area=\"heap\"}, 1)",
+          "expr": "100 * jvm_memory_bytes_used{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",area=\"heap\"} / clamp_min(jvm_memory_bytes_max{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",area=\"heap\"}, 1)",
           "legendFormat": "heap {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "100 * jvm_memory_bytes_used{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",area=\"nonheap\"} / clamp_min(jvm_memory_bytes_max{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",area=\"nonheap\"}, 1)",
+          "expr": "100 * jvm_memory_bytes_used{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",area=\"nonheap\"} / clamp_min(jvm_memory_bytes_max{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",area=\"nonheap\"}, 1)",
           "legendFormat": "nonheap {{instance}}",
           "refId": "B"
         },
         {
-          "expr": "100 * jvm_memory_pool_bytes_used{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",pool=\"G1 Old Gen\"} / clamp_min(jvm_memory_pool_bytes_max{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\",pool=\"G1 Old Gen\"}, 1)",
+          "expr": "100 * jvm_memory_pool_bytes_used{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",pool=\"G1 Old Gen\"} / clamp_min(jvm_memory_pool_bytes_max{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\",pool=\"G1 Old Gen\"}, 1)",
           "legendFormat": "old-gen {{instance}}",
           "refId": "C"
         }
@@ -698,7 +698,7 @@
       },
       "targets": [
         {
-          "expr": "100 * rate(jvm_gc_collection_seconds_sum{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}[5m])",
+          "expr": "100 * rate(jvm_gc_collection_seconds_sum{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}[5m])",
           "legendFormat": "{{instance}} {{gc}}",
           "refId": "A"
         }
@@ -749,7 +749,7 @@
       },
       "targets": [
         {
-          "expr": "sum by(state) (jvm_threads_state{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "sum by(state) (jvm_threads_state{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "{{state}}",
           "refId": "A"
         }
@@ -804,12 +804,12 @@
       },
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "expr": "process_resident_memory_bytes{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}",
           "legendFormat": "RSS {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "process_virtual_memory_bytes{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}",
+          "expr": "process_virtual_memory_bytes{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}",
           "legendFormat": "Virtual {{instance}}",
           "refId": "B"
         }
@@ -873,17 +873,17 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(job_thread_pool_task_total{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(job_thread_pool_task_total{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}[5m]))",
           "legendFormat": "submitted/s",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(job_thread_pool_completedTask_total{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(job_thread_pool_completedTask_total{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}[5m]))",
           "legendFormat": "completed/s",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(job_thread_pool_rejection_total{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(job_thread_pool_rejection_total{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}[5m]))",
           "legendFormat": "rejected/s",
           "refId": "C"
         }
@@ -934,17 +934,17 @@
       },
       "targets": [
         {
-          "expr": "max(job_thread_pool_activeCount{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "max(job_thread_pool_activeCount{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "active threads",
           "refId": "A"
         },
         {
-          "expr": "max(job_thread_pool_poolSize{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "max(job_thread_pool_poolSize{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "pool size",
           "refId": "B"
         },
         {
-          "expr": "max(job_thread_pool_queueTaskCount{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "max(job_thread_pool_queueTaskCount{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "queue depth",
           "refId": "C"
         }
@@ -995,7 +995,7 @@
       },
       "targets": [
         {
-          "expr": "sum by(type) (job_count{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "sum by(type) (job_count{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
@@ -1063,7 +1063,7 @@
       },
       "targets": [
         {
-          "expr": "sum by(type) (hazelcast_executor_queueSize{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "sum by(type) (hazelcast_executor_queueSize{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
@@ -1118,7 +1118,7 @@
       },
       "targets": [
         {
-          "expr": "100 * hazelcast_executor_queueSize{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"} / clamp_min(hazelcast_executor_queueSize{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"} + hazelcast_executor_queueRemainingCapacity{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}, 1)",
+          "expr": "100 * hazelcast_executor_queueSize{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"} / clamp_min(hazelcast_executor_queueSize{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"} + hazelcast_executor_queueRemainingCapacity{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}, 1)",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
@@ -1182,17 +1182,17 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(job_thread_pool_rejection_total{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"}[5m]))",
+          "expr": "sum(rate(job_thread_pool_rejection_total{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"}[5m]))",
           "legendFormat": "rejection/s",
           "refId": "A"
         },
         {
-          "expr": "max(jvm_threads_deadlocked{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "max(jvm_threads_deadlocked{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "deadlocked threads",
           "refId": "B"
         },
         {
-          "expr": "1 - min(hazelcast_partition_isLocalMemberSafe{job=\"seatunnel_engine_http\",cluster=~\"$cluster\",instance=~\"$instance\"})",
+          "expr": "1 - min(hazelcast_partition_isLocalMemberSafe{job=\"seatunnel_engine_http\",cluster_name=~\"$cluster\",instance=~\"$instance\"})",
           "legendFormat": "partition unsafe flag (1=unsafe)",
           "refId": "C"
         }

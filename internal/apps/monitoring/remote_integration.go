@@ -74,6 +74,7 @@ func (s *Service) BuildPrometheusSDTargets(ctx context.Context) ([]*PrometheusSD
 					"job":          "seatunnel_engine_http",
 					"cluster_id":   clusterID,
 					"cluster_name": clusterName,
+					"cluster":      clusterName, // Grafana 大盘变量 $cluster 使用此 label
 					"env":          env,
 				},
 			}

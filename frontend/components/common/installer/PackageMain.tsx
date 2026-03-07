@@ -42,7 +42,7 @@ export function PackageMain() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="w-full space-y-6">
       {/* Header / 头部 */}
       <div className="flex items-center justify-between">
         <div>

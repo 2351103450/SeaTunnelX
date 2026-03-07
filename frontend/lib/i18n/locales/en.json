@@ -261,7 +261,7 @@
     "myReceived": "My Received",
     "hostManagement": "Host Management",
     "clusterManagement": "Cluster Management",
-    "monitoringCenter": "Monitoring Center",
+    "monitoringCenter": "Alert Center",
     "commandLogs": "Command Logs",
     "auditLogs": "Audit Logs",
     "packageManagement": "Package Management",

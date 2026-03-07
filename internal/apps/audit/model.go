@@ -140,7 +140,7 @@ type AuditLog struct {
 	ResourceID   string       `json:"resource_id" gorm:"size:100;index:idx_resource"`
 	ResourceName string       `json:"resource_name" gorm:"size:200"`
 	// Trigger: "auto" (Agent) or "manual" (user), empty for legacy records.
-	// Trigger：自动（Agent）或人为（用户），空表示旧数据。
+	// Trigger：自动（Agent）或手动（用户），空表示旧数据。
 	Trigger  string       `json:"trigger" gorm:"size:20;index"`
 	Details  AuditDetails `json:"details" gorm:"type:json"`
 	IPAddress string      `json:"ip_address" gorm:"size:45"`
@@ -179,7 +179,7 @@ type AuditLogFilter struct {
 	ResourceType string     `json:"resource_type"`
 	ResourceID   string     `json:"resource_id"`
 	// Trigger filters by trigger column: "auto" (agent) or "manual" (user).
-	// Trigger 按 trigger 字段过滤：auto（Agent 自动）或 manual（人为）。
+	// Trigger 按 trigger 字段过滤：auto（Agent 自动）或 manual（手动）。
 	Trigger   string     `json:"trigger"`
 	StartTime *time.Time `json:"start_time"`
 	EndTime   *time.Time `json:"end_time"`

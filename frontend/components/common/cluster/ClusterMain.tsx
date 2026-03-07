@@ -248,7 +248,7 @@ export function ClusterMain() {
 
       <Separator />
 
-      {/* Filters / 过滤器 */}
+      {/* Filters / 过滤器 - 左对齐 */}
       <motion.div
         className='flex flex-wrap gap-4 items-end'
         variants={itemVariants}
@@ -322,7 +322,7 @@ export function ClusterMain() {
             {t('cluster.noClusters')}
           </div>
         ) : (
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+          <div className='grid grid-cols-[repeat(auto-fill,minmax(400px,400px))] gap-5'>
             {clusters.map((cluster) => (
               <ClusterCard
                 key={cluster.id}

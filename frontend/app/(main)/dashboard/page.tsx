@@ -8,14 +8,12 @@ import {
   Server,
   Database,
   Activity,
-  CheckCircle,
-  AlertCircle,
-  Clock,
   Ship,
   Layers,
   RefreshCw,
 } from 'lucide-react';
 import {OverviewService, OverviewData} from '@/lib/services/dashboard';
+import {MonitoringOverview} from '@/components/common/monitoring';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link';
 
@@ -141,201 +139,12 @@ export default function DashboardPage() {
         ))}
       </div>
 
-
-      <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
-        <motion.div
-          initial={{opacity: 0, x: -20}}
-          animate={{opacity: 1, x: 0}}
-          transition={{delay: 0.4, duration: 0.5}}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className='flex items-center gap-2'>
-                <Database className='w-5 h-5 text-primary' />
-                {t('clusterStatus')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className='space-y-4'>
-                {data?.cluster_summaries && data.cluster_summaries.length > 0 ? (
-                  data.cluster_summaries.map((cluster) => (
-                    <Link key={cluster.id} href={`/clusters/${cluster.id}`}>
-                      <div className='p-4 rounded-lg bg-muted/50 space-y-3 hover:bg-muted transition-colors cursor-pointer'>
-                        <div className='flex items-center justify-between'>
-                          <div className='flex items-center gap-2'>
-                            <span
-                              className={`w-2 h-2 rounded-full ${
-                                cluster.status === 'unhealthy' || (cluster.status === 'running' && (cluster.online_nodes ?? 0) === 0)
-                                  ? 'bg-red-500'
-                                  : cluster.status === 'running'
-                                  ? 'bg-green-500'
-                                  : cluster.status === 'error'
-                                  ? 'bg-red-500'
-                                  : 'bg-gray-400'
-                              }`}
-                            />
-                            <span className='font-medium'>{cluster.name}</span>
-                          </div>
-                          <span className='text-sm text-muted-foreground'>
-                            {cluster.total_nodes} {t('nodes')}
-                            {cluster.status === 'unhealthy' && (
-                              <span className='ml-1 text-destructive'>（{t('clusterUnhealthy')}）</span>
-                            )}
-                          </span>
-                        </div>
-                        <div className='grid grid-cols-3 gap-4 text-sm text-muted-foreground'>
-                          <div>{t('master')}: {cluster.master_nodes}</div>
-                          <div>{t('worker')}: {cluster.worker_nodes}</div>
-                          <div>{t('runningNodes')}: {cluster.running_nodes}</div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className='text-center py-8 text-muted-foreground'>
-                    {t('noClusterData')}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{opacity: 0, x: 20}}
-          animate={{opacity: 1, x: 0}}
-          transition={{delay: 0.4, duration: 0.5}}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className='flex items-center gap-2'>
-                <Server className='w-5 h-5 text-primary' />
-                {t('hostStatus')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className='space-y-4'>
-                {data?.host_summaries && data.host_summaries.length > 0 ? (
-                  data.host_summaries.map((host) => (
-                    <Link key={host.id} href={`/hosts/${host.id}`}>
-                      <div className='p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer'>
-                        <div className='flex items-center justify-between'>
-                          <div className='flex items-center gap-2'>
-                            <span
-                              className={`w-2 h-2 rounded-full ${
-                                host.is_online ? 'bg-green-500' : 'bg-gray-400'
-                              }`}
-                            />
-                            <span className='font-medium'>{host.name}</span>
-                            <span className='text-sm text-muted-foreground'>
-                              ({host.ip_address})
-                            </span>
-                          </div>
-                          <span className='text-sm text-muted-foreground'>
-                            {host.node_count} {t('nodes')}
-                          </span>
-                        </div>
-                        <div className='mt-2 text-sm text-muted-foreground'>
-                          {t('agent')}: {host.agent_status !== 'installed' && host.agent_status !== 'offline'
-                            ? t('notInstalled')
-                            : host.is_online
-                              ? t('online')
-                              : t('offline')}
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                ) : (
-                  <div className='text-center py-8 text-muted-foreground'>
-                    {t('noHostData')}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-
       <motion.div
         initial={{opacity: 0, y: 20}}
         animate={{opacity: 1, y: 0}}
-        transition={{delay: 0.5, duration: 0.5}}
+        transition={{delay: 0.35, duration: 0.5}}
       >
-        <Card>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
-              <Activity className='w-5 h-5 text-primary' />
-              {t('recentActivities')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className='space-y-4'>
-              {data?.recent_activities && data.recent_activities.length > 0 ? (
-                data.recent_activities.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className='flex items-start gap-3 pb-3 border-b last:border-0 last:pb-0'
-                  >
-                    <div className='mt-0.5'>
-                      {activity.type === 'success' && (
-                        <CheckCircle className='w-4 h-4 text-green-500' />
-                      )}
-                      {activity.type === 'warning' && (
-                        <AlertCircle className='w-4 h-4 text-yellow-500' />
-                      )}
-                      {activity.type === 'error' && (
-                        <AlertCircle className='w-4 h-4 text-red-500' />
-                      )}
-                      {activity.type === 'info' && (
-                        <Activity className='w-4 h-4 text-primary' />
-                      )}
-                    </div>
-                    <div className='flex-1 min-w-0'>
-                      <p className='text-sm'>{activity.message}</p>
-                      <p className='text-xs text-muted-foreground flex items-center gap-1 mt-1'>
-                        <Clock className='w-3 h-3' />
-                        {activity.timestamp}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className='text-center py-8 text-muted-foreground'>
-                  {t('noActivityData')}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <motion.div
-        initial={{opacity: 0, y: 20}}
-        animate={{opacity: 1, y: 0}}
-        transition={{delay: 0.6, duration: 0.5}}
-      >
-        <Card className='bg-primary/5 border-primary/20'>
-          <CardContent className='py-4'>
-            <div className='flex items-center justify-between'>
-              <div className='flex items-center gap-3'>
-                <Ship className='w-6 h-6 text-primary' />
-                <div>
-                  <p className='font-medium'>{t('welcome')}</p>
-                  <p className='text-sm text-muted-foreground'>{t('welcomeDesc')}</p>
-                </div>
-              </div>
-              <div className='flex gap-2'>
-                <Link href='/hosts'>
-                  <Button variant='outline' size='sm'>{t('addHost')}</Button>
-                </Link>
-                <Link href='/clusters'>
-                  <Button size='sm'>{t('createCluster')}</Button>
-                </Link>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <MonitoringOverview compact />
       </motion.div>
     </div>
   );

@@ -261,7 +261,7 @@
     "myReceived": "我的领取",
     "hostManagement": "主机管理",
     "clusterManagement": "集群管理",
-    "monitoringCenter": "监控中心",
+    "monitoringCenter": "告警中心",
     "commandLogs": "命令记录",
     "auditLogs": "审计日志",
     "packageManagement": "安装包管理",
@@ -678,7 +678,7 @@
     "ipAddress": "IP 地址",
     "trigger": "触发方式",
     "triggerAuto": "自动",
-    "triggerManual": "人为",
+    "triggerManual": "手动",
     "noAuditLogs": "暂无审计日志",
     "filterConditions": "筛选条件",
     "searchUsernamePlaceholder": "按用户名搜索",
@@ -1251,8 +1251,8 @@
     }
   },
   "monitoringCenter": {
-    "title": "监控中心",
-    "subtitle": "统一查看监控看板、告警闭环与通知渠道。",
+    "title": "告警中心",
+    "subtitle": "集中查看告警与通知渠道配置。",
     "refresh": "刷新",
     "loadError": "加载监控数据失败",
     "totalClusters": "集群总数",

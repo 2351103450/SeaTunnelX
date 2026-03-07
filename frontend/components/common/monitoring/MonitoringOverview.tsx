@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {Tabs, TabsList, TabsTrigger} from '@/components/ui/tabs';
 
 type TimeRange = 'now-1h' | 'now-6h' | 'now-24h' | 'now-7d';
 type RefreshInterval = 'off' | '15s' | '30s' | '1m';
@@ -51,6 +52,8 @@ function buildGrafanaProxyDashboardURL(
   timeFrom: TimeRange,
   refresh: RefreshInterval,
   grafanaTheme: GrafanaTheme,
+  clusterName?: string,
+  instance?: string,
 ): string {
   const uid = resolveDashboardUID(locale);
   const slug = resolveDashboardSlug(locale);
@@ -65,6 +68,16 @@ function buildGrafanaProxyDashboardURL(
     search.set('refresh', refresh);
   }
   search.set('theme', grafanaTheme);
+  if (clusterName && clusterName.trim().length > 0) {
+    // Bind dashboard variable $cluster to selected cluster name.
+    // 通过 URL 参数将 Grafana 变量 $cluster 绑定到当前选中的集群。
+    search.set('var-cluster', clusterName.trim());
+  }
+  if (instance && instance.trim().length > 0) {
+    // Bind dashboard variable $instance to selected node instance.
+    // 通过 URL 参数将 Grafana 变量 $instance 绑定到当前选中的节点实例。
+    search.set('var-instance', instance.trim());
+  }
 
   // Use full kiosk mode to hide Grafana side/top navigation as much as possible.
   // 使用完整 kiosk 模式，尽量隐藏 Grafana 左侧/顶部导航。
@@ -87,7 +100,7 @@ function resolveHealthBadgeVariant(
   return 'outline';
 }
 
-export function MonitoringOverview() {
+export function MonitoringOverview({compact = false}: {compact?: boolean} = {}) {
   const t = useTranslations('monitoringCenter');
   const {locale} = useLocale();
   const {resolvedTheme} = useTheme();
@@ -104,6 +117,16 @@ export function MonitoringOverview() {
     useState<PlatformHealthData | null>(null);
   const [clusterHealth, setClusterHealth] = useState<ClusterHealthItem[]>([]);
   const [healthLoading, setHealthLoading] = useState<boolean>(true);
+  const [selectedClusterName, setSelectedClusterName] = useState<string | null>(
+    null,
+  );
+  const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
+    null,
+  );
+  const [selectedInstance, setSelectedInstance] = useState<string>('$__all');
+  const [instancesByCluster, setInstancesByCluster] = useState<
+    Record<number, string[]>
+  >({});
   const frameContainerRef = useRef<HTMLDivElement | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const grafanaTheme: GrafanaTheme =
@@ -131,7 +154,15 @@ export function MonitoringOverview() {
       }
 
       if (clustersResult.success && clustersResult.data) {
-        setClusterHealth(clustersResult.data.clusters || []);
+        const clusters = clustersResult.data.clusters || [];
+        setClusterHealth(clusters);
+        // 默认选中第一个集群（仅在还未手动选择时）
+        if (clusters.length > 0 && !selectedClusterName) {
+          const first = clusters[0];
+          setSelectedClusterName(first.cluster_name);
+          setSelectedClusterId(first.cluster_id);
+          setSelectedInstance('$__all');
+        }
       } else {
         setClusterHealth([]);
       }
@@ -146,7 +177,14 @@ export function MonitoringOverview() {
     } finally {
       setHealthLoading(false);
     }
-  }, [t]);
+  }, [t, selectedClusterName]);
+
+  const currentInstances = useMemo(() => {
+    if (!selectedClusterId) {
+      return [];
+    }
+    return instancesByCluster[selectedClusterId] || [];
+  }, [instancesByCluster, selectedClusterId]);
 
   const dashboardURL = useMemo(
     () =>
@@ -155,8 +193,21 @@ export function MonitoringOverview() {
         timeRange,
         refreshInterval,
         grafanaTheme,
+        selectedClusterName && selectedClusterName.trim().length > 0
+          ? selectedClusterName
+          : undefined,
+        selectedInstance && selectedInstance.trim().length > 0
+          ? selectedInstance
+          : undefined,
       ),
-    [locale, timeRange, refreshInterval, grafanaTheme],
+    [
+      locale,
+      timeRange,
+      refreshInterval,
+      grafanaTheme,
+      selectedClusterName,
+      selectedInstance,
+    ],
   );
   const embedURL = useMemo(
     () =>
@@ -165,8 +216,21 @@ export function MonitoringOverview() {
         timeRange,
         refreshInterval,
         grafanaTheme,
+        selectedClusterName && selectedClusterName.trim().length > 0
+          ? selectedClusterName
+          : undefined,
+        selectedInstance && selectedInstance.trim().length > 0
+          ? selectedInstance
+          : undefined,
       ),
-    [locale, timeRange, refreshInterval, grafanaTheme],
+    [
+      locale,
+      timeRange,
+      refreshInterval,
+      grafanaTheme,
+      selectedClusterName,
+      selectedInstance,
+    ],
   );
 
   const resolveHealthLabel = useCallback(
@@ -189,6 +253,51 @@ export function MonitoringOverview() {
   useEffect(() => {
     loadHealth();
   }, [loadHealth]);
+
+  // Load node instances for the selected cluster so that we can build
+  // var-instance=ip:cluster_port values for Grafana.
+  useEffect(() => {
+    const clusterId = selectedClusterId;
+    if (!clusterId) {
+      return;
+    }
+    if (instancesByCluster[clusterId]) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const result = await services.cluster.getNodesSafe(clusterId);
+      if (!result.success || !result.data || cancelled) {
+        return;
+      }
+      const instances = Array.from(
+        new Set(
+          result.data
+            .filter(
+              (node) =>
+                node.host_ip &&
+                typeof node.hazelcast_port === 'number' &&
+                node.hazelcast_port > 0,
+            )
+            .map((node) => `${node.host_ip}:${node.hazelcast_port}`),
+        ),
+      ).sort((a, b) => a.localeCompare(b, 'en'));
+
+      if (!instances.length) {
+        return;
+      }
+
+      setInstancesByCluster((prev) => ({
+        ...prev,
+        [clusterId]: instances,
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClusterId, instancesByCluster]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined') {
@@ -274,12 +383,16 @@ export function MonitoringOverview() {
     <div className='space-y-4'>
       <Card>
         <CardHeader className='space-y-2'>
-          <div className='flex items-center justify-between'>
+          <div className='flex items-center justify-between gap-3'>
             <CardTitle>{t('platformHealth.title')}</CardTitle>
-            <Button variant='outline' onClick={loadHealth}>
-              <RefreshCw className='mr-2 h-4 w-4' />
-              {t('refresh')}
-            </Button>
+            <div className='flex flex-wrap items-center gap-2'>
+              {!compact && (
+                <Button variant='outline' onClick={loadHealth} size='sm'>
+                  <RefreshCw className='mr-2 h-4 w-4' />
+                  {t('refresh')}
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className='space-y-4'>
@@ -287,71 +400,6 @@ export function MonitoringOverview() {
             <div className='text-sm text-muted-foreground'>{t('loading')}</div>
           ) : platformHealth ? (
             <>
-              <div className='grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8'>
-                <div className='rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('totalClusters')}
-                  </div>
-                  <div className='mt-1 text-xl font-semibold'>
-                    {platformHealth.total_clusters}
-                  </div>
-                </div>
-                <div className='rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('healthyClusters')}
-                  </div>
-                  <div className='mt-1 text-xl font-semibold'>
-                    {platformHealth.healthy_clusters}
-                  </div>
-                </div>
-                <div className='rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('degradedClusters')}
-                  </div>
-                  <div className='mt-1 text-xl font-semibold'>
-                    {platformHealth.degraded_clusters}
-                  </div>
-                </div>
-                <div className='rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('unhealthyClusters')}
-                  </div>
-                  <div className='mt-1 text-xl font-semibold'>
-                    {platformHealth.unhealthy_clusters}
-                  </div>
-                </div>
-                <div className='rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('activeAlerts')}
-                  </div>
-                  <div className='mt-1 text-xl font-semibold'>
-                    {platformHealth.active_alerts}
-                  </div>
-                </div>
-                <div className='rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('criticalAlerts')}
-                  </div>
-                  <div className='mt-1 text-xl font-semibold'>
-                    {platformHealth.critical_alerts}
-                  </div>
-                </div>
-                <div className='col-span-2 rounded-md border p-3'>
-                  <div className='text-xs text-muted-foreground'>
-                    {t('healthStatus')}
-                  </div>
-                  <div className='mt-1'>
-                    <Badge
-                      variant={resolveHealthBadgeVariant(
-                        platformHealth.health_status,
-                      )}
-                    >
-                      {resolveHealthLabel(platformHealth.health_status)}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
               <div className='overflow-x-auto'>
                 <Table>
                   <TableHeader>
@@ -361,7 +409,9 @@ export function MonitoringOverview() {
                       <TableHead>{t('nodes')}</TableHead>
                       <TableHead>{t('activeAlerts')}</TableHead>
                       <TableHead>{t('criticalAlerts')}</TableHead>
-                      <TableHead>{t('actions')}</TableHead>
+                      <TableHead className='w-[1%] whitespace-nowrap text-right'>
+                        {t('actions')}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -390,11 +440,11 @@ export function MonitoringOverview() {
                           <TableCell>{`${cluster.online_nodes}/${cluster.total_nodes}`}</TableCell>
                           <TableCell>{cluster.active_alerts}</TableCell>
                           <TableCell>{cluster.critical_alerts}</TableCell>
-                          <TableCell>
-                            <div className='flex items-center gap-2'>
+                          <TableCell className='w-[1%] whitespace-nowrap'>
+                            <div className='flex items-center gap-2 justify-end'>
                               <Button asChild size='sm' variant='outline'>
                                 <Link
-                                  href={`/monitoring/clusters/${cluster.cluster_id}`}
+                                  href={`/clusters/${cluster.cluster_id}`}
                                 >
                                   {t('viewDetails')}
                                 </Link>
@@ -445,7 +495,60 @@ export function MonitoringOverview() {
             </div>
           </div>
 
-          <div className='flex flex-col gap-2 md:flex-row md:items-center'>
+          <div className='flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center'>
+            {clusterHealth.length > 0 && (
+              <div className='w-full md:w-56'>
+                <Select
+                  value={selectedClusterName ?? ''}
+                  onValueChange={(value) => {
+                    setSelectedClusterName(value);
+                    setSelectedInstance('$__all');
+                    const found = clusterHealth.find(
+                      (c) => c.cluster_name === value,
+                    );
+                    setSelectedClusterId(found ? found.cluster_id : null);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder='选择集群' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clusterHealth.map((cluster) => (
+                      <SelectItem
+                        key={cluster.cluster_id}
+                        value={cluster.cluster_name}
+                      >
+                        {cluster.cluster_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {selectedClusterId && (
+              <div className='w-full md:w-56'>
+                <Select
+                  value={selectedInstance}
+                  onValueChange={(value) => {
+                    setSelectedInstance(value);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder='选择节点' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='$__all'>全部节点</SelectItem>
+                    {currentInstances.map((addr) => (
+                      <SelectItem key={addr} value={addr}>
+                        {addr}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className='w-full md:w-56'>
               <Select
                 value={timeRange}

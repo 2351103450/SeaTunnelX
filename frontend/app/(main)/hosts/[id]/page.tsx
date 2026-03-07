@@ -22,7 +22,7 @@ export default async function HostDetailRoute({params}: HostDetailPageProps) {
 
   if (isNaN(hostId) || hostId < 1) {
     return (
-      <div className='container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'>
+      <div className='space-y-4'>
         <p className='text-destructive'>无效的主机 ID</p>
         <Link href='/hosts' className='text-primary underline mt-4 inline-block'>
           返回主机列表
@@ -32,10 +32,8 @@ export default async function HostDetailRoute({params}: HostDetailPageProps) {
   }
 
   return (
-    <div className='container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'>
-      <Suspense>
-        <HostDetailPage hostId={hostId} />
-      </Suspense>
-    </div>
+    <Suspense>
+      <HostDetailPage hostId={hostId} />
+    </Suspense>
   );
 }

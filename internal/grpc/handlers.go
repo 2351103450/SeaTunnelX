@@ -862,7 +862,7 @@ func (s *Server) HandleProcessEventReport(ctx context.Context, agentID string, r
 		zap.String("event_type", string(eventType)),
 	)
 
-	// 写入审计日志，区分自动（Agent 上报）与人为（UI 操作）；资源名称与人为操作一致：集群名（主机名 - 角色）
+	// 写入审计日志，区分自动（Agent 上报）与手动（UI 操作）；资源名称与手动操作一致：集群名（主机名 - 角色）
 	if s.auditRepo != nil {
 		action := eventTypeToAuditAction(eventType)
 		if action != "" {

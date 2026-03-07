@@ -89,7 +89,7 @@ function getResourceTypeLabel(resourceType: string, t: (key: string) => string):
   return resourceType;
 }
 
-/** 根据 trigger 字段或 details.trigger 显示触发方式：自动 / 人为（兼容旧数据） */
+/** 根据 trigger 字段或 details.trigger 显示触发方式：自动 / 手动（兼容旧数据） */
 function getTriggerDisplay(
   log: Pick<AuditLogInfo, 'trigger' | 'details'>,
   t: (key: string) => string,

@@ -218,8 +218,8 @@ export function ClusterCard({cluster, onEdit, onDelete, onRefresh}: ClusterCardP
 
   return (
     <>
-      <Card className='hover:shadow-md transition-shadow'>
-        <CardHeader className='pb-2'>
+      <Card className='hover:shadow-md transition-shadow min-h-[320px] flex flex-col'>
+        <CardHeader className='pb-3 pt-5 px-5'>
           <div className='flex items-start justify-between'>
             <div className='flex items-center gap-2'>
               <div className={`w-2 h-2 rounded-full ${getStatusColorClass(cluster)}`} />
@@ -281,8 +281,8 @@ export function ClusterCard({cluster, onEdit, onDelete, onRefresh}: ClusterCardP
           )}
         </CardHeader>
 
-        <CardContent className='pb-2'>
-          <div className='space-y-3'>
+        <CardContent className='pb-3 px-5 flex-1'>
+          <div className='space-y-4'>
             <div className='flex items-center justify-between'>
               <span className='text-sm text-muted-foreground'>{t('cluster.status')}</span>
               <Badge
@@ -318,7 +318,7 @@ export function ClusterCard({cluster, onEdit, onDelete, onRefresh}: ClusterCardP
           </div>
         </CardContent>
 
-        <CardFooter className='pt-2'>
+        <CardFooter className='pt-3 pb-5 px-5'>
           <div className='flex w-full gap-2'>
             {canStart && (
               <Button

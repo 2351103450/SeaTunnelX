@@ -1,3 +1,11 @@
+<!--
+ * @Author: Leon Yoah 1733839298@qq.com
+ * @Date: 2026-02-07 17:19:27
+ * @LastEditors: Leon Yoah 1733839298@qq.com
+ * @LastEditTime: 2026-03-07 12:19:34
+ * @FilePath: \SeaTunnelX\agent.md
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+-->
 # SeaTunnelX Agent 工作指南
 
 本文档用于初始化本仓库的 AI/代码 Agent 协作规范，作为默认执行基线。
@@ -75,6 +83,11 @@ make pre_commit
 ```bash
 go test ./internal/proto/agent/...
 ```
+
+## UI/前端 待办与约定
+
+- **页面标题左侧图标**：各主页面标题左侧应带 logo/图标，与现有风格一致。参考：控制台（Dashboard）使用 `Ship`、告警中心使用 `Activity`（lucide-react）；布局为 `flex items-center gap-3`，图标 `h-8 w-8 shrink-0 text-primary`，右侧为标题与副标题。新增或改版主页面时请保持该风格。
+- **过滤栏左对齐**：整个项目内，列表/检索页的过滤栏（搜索框、下拉筛选、搜索/清除按钮等）统一采用左对齐布局：不做 `w-full` 撑满或中间弹性占位把操作推到右侧；搜索框使用 `flex-1 min-w-[200px] max-w-sm` 等合理宽度，与筛选控件从左往右自然排列。参考：集群管理 `ClusterMain` 条件栏。
 
 ## 提交前检查清单
 
