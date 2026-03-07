@@ -1,0 +1,56 @@
+# UI 约定
+
+> 布局、筛选栏、页面标题与国际化。
+
+---
+
+## 概述
+
+控制台采用统一主布局（侧栏 + 内容区）、列表页左对齐筛选栏、以及带前置图标的页面标题。这些约定在 `agent.md` 中有说明，新增或修改主页面与列表 UI 时应遵循。
+
+---
+
+## 页面布局
+
+- **主内容区**：由 `app/(main)/layout.tsx` 控制。内容容器使用全宽与响应式 padding（`w-full max-w-none px-3 sm:px-4 lg:px-6 ...`）。`(main)` 下的单页**不要**再加自己的 `container max-w-*` 或重复 padding，以免与主布局冲突。
+- **页面结构**：每个主页面通常包含标题块（图标 + 标题 + 可选副标题）和主组件（如 `ClusterMain`、`PackageMain`）。页面保持精简：布局与内容交给主组件。
+
+---
+
+## 页面标题与图标
+
+- **约定**（来自 `agent.md`）：主页面标题**左侧**应有 logo/图标，与现有风格一致。
+- **布局**：`flex items-center gap-3`；图标容器 `h-8 w-8 shrink-0 text-primary`；右侧为标题与可选副标题。
+- **示例**：仪表盘用 `Ship`，告警中心用 `Activity`（lucide-react）。新增或改版主页面时保持该模式。
+
+---
+
+## 筛选栏（列表/搜索页）
+
+- **对齐**：筛选栏在项目内**左对齐**。不要用 `w-full` 把整栏拉满、把操作推到最右，或加弹性空白把操作推到末尾。
+- **搜索框**：使用限定宽度如 `flex-1 min-w-[200px] max-w-sm`，避免搜索框过宽；其他筛选（下拉、按钮）自然排在右侧。
+- **参考**：集群管理筛选栏（`ClusterMain`）为参考实现。
+
+---
+
+## 组件与样式
+
+- **基础 UI**：使用 `components/ui/` 中的组件（Button、Card、Select、Input、Table 等）和 Tailwind 做布局与间距。
+- **主题**：主题与语言通过 layout/providers 提供；尽量使用语义 token（如 `text-primary`）。
+- **响应式**：用 Tailwind 断点（`sm:`、`md:`、`lg:`）做布局变化；筛选栏与卡片在小屏上保持可用（参考 `ClusterMain` 的换行或堆叠）。
+
+---
+
+## 国际化（i18n）
+
+- **语言包**：在 `lib/i18n/locales/` 下（如 `zh.json`、`en.json`）。主界面与共享界面的用户可见文案使用项目的 i18n provider 与 key。
+- **新增文案**：在两种语言文件中添加同一 key，代码中使用该 key，切换语言时显示对应文案。
+
+---
+
+## 一致性检查项
+
+- 新列表/搜索页：筛选栏左对齐，搜索框宽度类似 `flex-1 min-w-[200px] max-w-sm`。
+- 新主页面：标题左侧带图标（`flex items-center gap-3`，图标 `h-8 w-8 shrink-0 text-primary`）。
+- 主内容区不额外加全宽容器或 max-width，以免覆盖 `(main)/layout.tsx`。
+- 布局与间距参考 `ClusterMain`、`PackageMain` 与仪表盘。
