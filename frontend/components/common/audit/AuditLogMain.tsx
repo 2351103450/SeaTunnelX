@@ -9,7 +9,7 @@
  * 本组件提供审计日志管理的主界面，包括列表、搜索和过滤操作。
  */
 
-import {useState, useEffect, useCallback} from 'react';
+import {useState, useEffect, useCallback, type KeyboardEvent} from 'react';
 import {useTranslations} from 'next-intl';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -134,6 +134,18 @@ export function AuditLogMain() {
   };
 
   /**
+   * Submit filter form via Enter key
+   * 通过 Enter 键提交过滤条件
+   */
+  const handleFilterInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') {
+      return;
+    }
+    e.preventDefault();
+    handleSearch();
+  };
+
+  /**
    * Handle page change
    * 处理页面变化
    */
@@ -228,7 +240,7 @@ export function AuditLogMain() {
                   placeholder={t('audit.searchUsernamePlaceholder')}
                   value={searchUsername}
                   onChange={(e) => setSearchUsername(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={handleFilterInputKeyDown}
                 />
               </div>
               <div className='min-w-0'>
@@ -359,6 +371,7 @@ export function AuditLogMain() {
                   type='date'
                   value={filterStartDate}
                   onChange={(e) => setFilterStartDate(e.target.value)}
+                  onKeyDown={handleFilterInputKeyDown}
                   className='w-full'
                 />
               </div>
@@ -370,6 +383,7 @@ export function AuditLogMain() {
                   type='date'
                   value={filterEndDate}
                   onChange={(e) => setFilterEndDate(e.target.value)}
+                  onKeyDown={handleFilterInputKeyDown}
                   className='w-full'
                 />
               </div>
