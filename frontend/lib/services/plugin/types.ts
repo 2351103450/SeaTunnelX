@@ -109,6 +109,8 @@ export interface AvailablePluginsResponse {
   total: number;
   version: string;
   mirror: string;
+  source: 'cache' | 'remote';
+  cache_hit: boolean;
 }
 
 /**

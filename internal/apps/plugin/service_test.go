@@ -23,6 +23,80 @@ import (
 	"time"
 )
 
+func TestListAvailablePluginsReturnsCacheSource(t *testing.T) {
+	service := NewService(nil)
+	service.cachedPlugins["2.3.12"] = []Plugin{{
+		Name:        "connector-cdc-mysql",
+		DisplayName: "CDC MySQL",
+		Category:    PluginCategoryConnector,
+		Version:     "2.3.12",
+	}}
+	service.pluginsCacheTime["2.3.12"] = time.Now()
+	service.SetPluginFetcher(func(ctx context.Context, version string) ([]Plugin, error) {
+		t.Fatalf("cache hit should not invoke remote fetcher")
+		return nil, nil
+	})
+
+	result, err := service.ListAvailablePlugins(context.Background(), "2.3.12", MirrorSourceAliyun)
+	if err != nil {
+		t.Fatalf("ListAvailablePlugins returned error: %v", err)
+	}
+
+	if !result.CacheHit {
+		t.Fatalf("expected cache_hit=true")
+	}
+	if result.Source != PluginListSourceCache {
+		t.Fatalf("expected source=cache, got %q", result.Source)
+	}
+	if len(result.Plugins) != 1 {
+		t.Fatalf("expected 1 cached plugin, got %d", len(result.Plugins))
+	}
+}
+
+func TestListAvailablePluginsReturnsRemoteSourceAndCachesResult(t *testing.T) {
+	service := NewService(nil)
+	callCount := 0
+	service.SetPluginFetcher(func(ctx context.Context, version string) ([]Plugin, error) {
+		callCount++
+		return []Plugin{{
+			Name:        "connector-cdc-mysql",
+			DisplayName: "CDC MySQL",
+			Category:    PluginCategoryConnector,
+			Version:     version,
+		}}, nil
+	})
+
+	result, err := service.ListAvailablePlugins(context.Background(), "2.3.12", MirrorSourceAliyun)
+	if err != nil {
+		t.Fatalf("ListAvailablePlugins returned error: %v", err)
+	}
+
+	if result.CacheHit {
+		t.Fatalf("expected cache_hit=false on first remote fetch")
+	}
+	if result.Source != PluginListSourceRemote {
+		t.Fatalf("expected source=remote, got %q", result.Source)
+	}
+	if callCount != 1 {
+		t.Fatalf("expected remote fetcher to be called once, got %d", callCount)
+	}
+
+	cachedResult, err := service.ListAvailablePlugins(context.Background(), "2.3.12", MirrorSourceAliyun)
+	if err != nil {
+		t.Fatalf("ListAvailablePlugins second call returned error: %v", err)
+	}
+
+	if !cachedResult.CacheHit {
+		t.Fatalf("expected second call to hit cache")
+	}
+	if cachedResult.Source != PluginListSourceCache {
+		t.Fatalf("expected second call source=cache, got %q", cachedResult.Source)
+	}
+	if callCount != 1 {
+		t.Fatalf("expected cached second call not to refetch, got %d calls", callCount)
+	}
+}
+
 // TestFetchPluginsFromDocs tests fetching plugins from Maven repository.
 // TestFetchPluginsFromDocs 测试从 Maven 仓库获取插件。
 func TestFetchPluginsFromDocs(t *testing.T) {

@@ -5,7 +5,7 @@
 
 'use client';
 
-import {useState, useEffect, useCallback} from 'react';
+import {useState, useEffect, useCallback, useMemo, useRef} from 'react';
 import {useTranslations} from 'next-intl';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -147,6 +147,7 @@ export function PluginMain() {
   // Dependency config state / 依赖配置状态
   const [isDependencyDialogOpen, setIsDependencyDialogOpen] = useState(false);
   const [pluginForDependency, setPluginForDependency] = useState<string>('');
+  const lastLoadedAvailableQueryRef = useRef<string | null>(null);
 
   // Plugin installation status per cluster / 每个集群的插件安装状态
   // Map: pluginName -> { clusterId -> InstalledPlugin }
@@ -159,62 +160,87 @@ export function PluginMain() {
    * Load available plugins
    * 加载可用插件列表
    */
-  const loadPlugins = useCallback(async () => {
+  const buildAvailableQueryKey = useCallback(
+    (version: string, mirror: MirrorSource) => `${version || 'default'}:${mirror}`,
+    [],
+  );
+
+  const filteredAvailablePlugins = useMemo(() => {
+    let filtered = plugins;
+
+    if (filterCategory !== 'all') {
+      filtered = filtered.filter((plugin) => plugin.category === filterCategory);
+    }
+
+    if (searchKeyword) {
+      const keyword = searchKeyword.toLowerCase();
+      filtered = filtered.filter(
+        (plugin) =>
+          plugin.name.toLowerCase().includes(keyword) ||
+          plugin.display_name.toLowerCase().includes(keyword) ||
+          plugin.description.toLowerCase().includes(keyword),
+      );
+    }
+
+    return filtered;
+  }, [filterCategory, plugins, searchKeyword]);
+
+  const loadPlugins = useCallback(async (options?: {force?: boolean}) => {
+    const requestVersion = selectedVersion || recommendedVersion || '';
+    const queryKey = buildAvailableQueryKey(requestVersion, selectedMirror);
+
+    if (!options?.force && lastLoadedAvailableQueryRef.current === queryKey) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
-
-    // Show loading toast for first load (cache miss may take up to 60s)
-    // 首次加载时显示提示（缓存未命中可能需要最多60秒）
-    const loadingToast = toast.loading(t('plugin.loadingFromMaven'), {
-      description: t('plugin.loadingFromMavenDesc'),
-    });
 
     try {
       const result: AvailablePluginsResponse =
         await PluginService.listAvailablePlugins(
-          selectedVersion || undefined,
+          requestVersion || undefined,
           selectedMirror,
         );
 
-      toast.dismiss(loadingToast);
+      setPlugins(result.plugins || []);
+      setTotal(result.total || (result.plugins || []).length);
+      lastLoadedAvailableQueryRef.current = buildAvailableQueryKey(
+        result.version || requestVersion,
+        selectedMirror,
+      );
 
-      let filteredPlugins = result.plugins || [];
-
-      // Apply category filter / 应用分类过滤
-      if (filterCategory !== 'all') {
-        filteredPlugins = filteredPlugins.filter(
-          (p) => p.category === filterCategory,
-        );
-      }
-
-      // Apply search filter / 应用搜索过滤
-      if (searchKeyword) {
-        const keyword = searchKeyword.toLowerCase();
-        filteredPlugins = filteredPlugins.filter(
-          (p) =>
-            p.name.toLowerCase().includes(keyword) ||
-            p.display_name.toLowerCase().includes(keyword) ||
-            p.description.toLowerCase().includes(keyword),
-        );
-      }
-
-      setPlugins(filteredPlugins);
-      setTotal(result.total || filteredPlugins.length);
-      if (result.version && !selectedVersion) {
+      if (result.version && result.version !== selectedVersion) {
         setSelectedVersion(result.version);
       }
+
+      if (
+        result.source === 'remote' &&
+        !result.cache_hit &&
+        (result.total || 0) > 0
+      ) {
+        toast.info(t('plugin.loadedFromMaven'), {
+          description: t('plugin.loadedFromMavenDesc'),
+        });
+      }
     } catch (err) {
-      toast.dismiss(loadingToast);
       const errorMsg =
         err instanceof Error ? err.message : t('plugin.loadError');
       setError(errorMsg);
       toast.error(errorMsg);
       setPlugins([]);
       setTotal(0);
+      lastLoadedAvailableQueryRef.current = null;
     } finally {
       setLoading(false);
     }
-  }, [selectedVersion, selectedMirror, filterCategory, searchKeyword, t]);
+  }, [
+    buildAvailableQueryKey,
+    recommendedVersion,
+    selectedMirror,
+    selectedVersion,
+    t,
+  ]);
 
   /**
    * Load local downloaded plugins and their cluster installation status
@@ -276,8 +302,11 @@ export function PluginMain() {
   }, []);
 
   useEffect(() => {
-    loadPlugins();
-  }, [loadPlugins]);
+    if (activeTab !== 'available') {
+      return;
+    }
+    void loadPlugins();
+  }, [activeTab, loadPlugins]);
 
   useEffect(() => {
     if (!selectedVersion && recommendedVersion) {
@@ -313,7 +342,9 @@ export function PluginMain() {
    * 处理搜索
    */
   const handleSearch = () => {
-    loadPlugins();
+    if (activeTab === 'local') {
+      setLocalPluginsPage(1);
+    }
   };
 
   /**
@@ -324,7 +355,8 @@ export function PluginMain() {
     if (activeTab === 'local') {
       loadLocalPlugins();
     } else {
-      loadPlugins();
+      lastLoadedAvailableQueryRef.current = null;
+      void loadPlugins({force: true});
     }
   };
 
@@ -789,7 +821,7 @@ export function PluginMain() {
             </CardHeader>
             <CardContent>
               <PluginGrid
-                plugins={plugins}
+                plugins={filteredAvailablePlugins}
                 loading={loading}
                 onViewDetail={handleViewDetail}
                 showInstallButton={true}

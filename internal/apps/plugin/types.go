@@ -63,7 +63,6 @@ var MirrorURLs = map[MirrorSource]string{
 	MirrorSourceHuaweiCloud: "https://repo.huaweicloud.com/repository/maven",
 }
 
-
 // PluginDependency represents a dependency of a plugin.
 // PluginDependency 表示插件的依赖项。
 type PluginDependency struct {
@@ -76,12 +75,12 @@ type PluginDependency struct {
 // PluginDependencyConfig represents a user-configured dependency for a plugin (GORM model).
 // PluginDependencyConfig 表示用户为插件配置的依赖项（GORM 模型）。
 type PluginDependencyConfig struct {
-	ID         uint   `gorm:"primaryKey" json:"id"`
-	PluginName string `gorm:"size:100;not null;index:idx_plugin_dep,unique" json:"plugin_name"` // 插件名称 / Plugin name
-	GroupID    string `gorm:"size:200;not null;index:idx_plugin_dep,unique" json:"group_id"`    // Maven groupId
-	ArtifactID string `gorm:"size:200;not null;index:idx_plugin_dep,unique" json:"artifact_id"` // Maven artifactId
-	Version    string `gorm:"size:50" json:"version"`                                           // 版本号（可选，留空则使用插件版本）/ Version (optional, use plugin version if empty)
-	TargetDir  string `gorm:"size:20;not null;default:lib" json:"target_dir"`                   // 目标目录 (lib) / Target directory
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	PluginName string    `gorm:"size:100;not null;index:idx_plugin_dep,unique" json:"plugin_name"` // 插件名称 / Plugin name
+	GroupID    string    `gorm:"size:200;not null;index:idx_plugin_dep,unique" json:"group_id"`    // Maven groupId
+	ArtifactID string    `gorm:"size:200;not null;index:idx_plugin_dep,unique" json:"artifact_id"` // Maven artifactId
+	Version    string    `gorm:"size:50" json:"version"`                                           // 版本号（可选，留空则使用插件版本）/ Version (optional, use plugin version if empty)
+	TargetDir  string    `gorm:"size:20;not null;default:lib" json:"target_dir"`                   // 目标目录 (lib) / Target directory
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
@@ -113,16 +112,16 @@ type Plugin struct {
 // 注意：插件在集群级别管理，而非主机级别。
 type InstalledPlugin struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
-	ClusterID   uint           `gorm:"index;not null" json:"cluster_id"`                             // 集群 ID / Cluster ID
-	PluginName  string         `gorm:"size:100;not null;index" json:"plugin_name"`                   // 插件名称 / Plugin name
-	ArtifactID  string         `gorm:"size:100" json:"artifact_id"`                                  // Maven artifact ID (e.g., connector-cdc-mysql)
-	Category    PluginCategory `gorm:"size:20;not null" json:"category"`                             // 分类 / Category
-	Version     string         `gorm:"size:20;not null" json:"version"`                              // 版本号 / Version
-	Status      PluginStatus   `gorm:"size:20;not null;default:installed" json:"status"`             // 状态 / Status
-	InstallPath string         `gorm:"size:255" json:"install_path"`                                 // 安装路径 / Install path
-	InstalledAt time.Time      `gorm:"not null" json:"installed_at"`                                 // 安装时间 / Installed at
-	UpdatedAt   time.Time      `json:"updated_at"`                                                   // 更新时间 / Updated at
-	InstalledBy uint           `json:"installed_by,omitempty"`                                       // 安装者 ID / Installed by
+	ClusterID   uint           `gorm:"index;not null" json:"cluster_id"`                 // 集群 ID / Cluster ID
+	PluginName  string         `gorm:"size:100;not null;index" json:"plugin_name"`       // 插件名称 / Plugin name
+	ArtifactID  string         `gorm:"size:100" json:"artifact_id"`                      // Maven artifact ID (e.g., connector-cdc-mysql)
+	Category    PluginCategory `gorm:"size:20;not null" json:"category"`                 // 分类 / Category
+	Version     string         `gorm:"size:20;not null" json:"version"`                  // 版本号 / Version
+	Status      PluginStatus   `gorm:"size:20;not null;default:installed" json:"status"` // 状态 / Status
+	InstallPath string         `gorm:"size:255" json:"install_path"`                     // 安装路径 / Install path
+	InstalledAt time.Time      `gorm:"not null" json:"installed_at"`                     // 安装时间 / Installed at
+	UpdatedAt   time.Time      `json:"updated_at"`                                       // 更新时间 / Updated at
+	InstalledBy uint           `json:"installed_by,omitempty"`                           // 安装者 ID / Installed by
 }
 
 // TableName returns the table name for InstalledPlugin.
@@ -153,22 +152,30 @@ type InstallPluginRequest struct {
 // PluginInstallStatus represents the installation status of a plugin.
 // PluginInstallStatus 表示插件的安装状态。
 type PluginInstallStatus struct {
-	PluginName string `json:"plugin_name"`          // 插件名称 / Plugin name
-	Status     string `json:"status"`               // 状态 / Status
-	Progress   int    `json:"progress"`             // 进度 (0-100) / Progress
-	Message    string `json:"message,omitempty"`    // 消息 / Message
-	Error      string `json:"error,omitempty"`      // 错误信息 / Error message
+	PluginName string `json:"plugin_name"`       // 插件名称 / Plugin name
+	Status     string `json:"status"`            // 状态 / Status
+	Progress   int    `json:"progress"`          // 进度 (0-100) / Progress
+	Message    string `json:"message,omitempty"` // 消息 / Message
+	Error      string `json:"error,omitempty"`   // 错误信息 / Error message
 }
 
 // AvailablePluginsResponse represents the response for listing available plugins.
 // AvailablePluginsResponse 表示获取可用插件列表的响应。
-type AvailablePluginsResponse struct {
-	Plugins []Plugin `json:"plugins"`       // 插件列表 / Plugin list
-	Total   int      `json:"total"`         // 总数 / Total count
-	Version string   `json:"version"`       // SeaTunnel 版本 / SeaTunnel version
-	Mirror  string   `json:"mirror"`        // 当前镜像源 / Current mirror
-}
+type PluginListSource string
 
+const (
+	PluginListSourceCache  PluginListSource = "cache"
+	PluginListSourceRemote PluginListSource = "remote"
+)
+
+type AvailablePluginsResponse struct {
+	Plugins  []Plugin         `json:"plugins"`   // 插件列表 / Plugin list
+	Total    int              `json:"total"`     // 总数 / Total count
+	Version  string           `json:"version"`   // SeaTunnel 版本 / SeaTunnel version
+	Mirror   string           `json:"mirror"`    // 当前镜像源 / Current mirror
+	Source   PluginListSource `json:"source"`    // 数据来源 / Data source
+	CacheHit bool             `json:"cache_hit"` // 是否命中缓存 / Whether cache was hit
+}
 
 // ==================== Plugin Download Types 插件下载类型 ====================
 
@@ -219,7 +226,6 @@ type AvailableVersionsResponse struct {
 	RecommendedVersion string   `json:"recommended_version"` // 推荐版本 / Recommended version
 	Warning            string   `json:"warning,omitempty"`   // 警告信息 / Warning message
 }
-
 
 // ==================== Plugin Dependency Config Types 插件依赖配置类型 ====================
 

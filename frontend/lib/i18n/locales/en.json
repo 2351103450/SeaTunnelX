@@ -831,6 +831,8 @@
     "loadError": "Failed to load connectors",
     "loadingFromMaven": "Loading connectors from Maven repository...",
     "loadingFromMavenDesc": "First load may take 30-60 seconds, subsequent loads will use cache",
+    "loadedFromMaven": "Connector list reloaded from Maven repository",
+    "loadedFromMavenDesc": "This request missed the backend cache; subsequent requests for the same version should use cache",
     "install": "Install",
     "uninstall": "Uninstall",
     "enable": "Enable",

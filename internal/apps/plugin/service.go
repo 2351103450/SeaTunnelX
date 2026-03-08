@@ -111,6 +111,7 @@ type Service struct {
 	repo          *Repository
 	clusterGetter ClusterGetter
 	downloader    *Downloader
+	pluginFetcher func(ctx context.Context, version string) ([]Plugin, error)
 
 	// agentCommandSender is used to send commands to agents for plugin installation
 	// agentCommandSender 用于向 Agent 发送命令进行插件安装
@@ -137,31 +138,45 @@ type Service struct {
 // NewService creates a new Service instance.
 // NewService 创建一个新的 Service 实例。
 func NewService(repo *Repository) *Service {
-	return &Service{
+	service := &Service{
 		repo:             repo,
 		downloader:       NewDownloader("./lib/plugins"),
 		cachedPlugins:    make(map[string][]Plugin),
 		pluginsCacheTime: make(map[string]time.Time),
 		installProgress:  make(map[string]*PluginInstallStatus),
 	}
+	service.pluginFetcher = service.fetchPluginsFromDocs
+	return service
 }
 
 // NewServiceWithDownloader creates a new Service instance with a custom downloader.
 // NewServiceWithDownloader 创建一个带有自定义下载器的新 Service 实例。
 func NewServiceWithDownloader(repo *Repository, pluginsDir string) *Service {
-	return &Service{
+	service := &Service{
 		repo:             repo,
 		downloader:       NewDownloader(pluginsDir),
 		cachedPlugins:    make(map[string][]Plugin),
 		pluginsCacheTime: make(map[string]time.Time),
 		installProgress:  make(map[string]*PluginInstallStatus),
 	}
+	service.pluginFetcher = service.fetchPluginsFromDocs
+	return service
 }
 
 // SetClusterGetter sets the cluster getter for version validation.
 // SetClusterGetter 设置集群获取器用于版本校验。
 func (s *Service) SetClusterGetter(getter ClusterGetter) {
 	s.clusterGetter = getter
+}
+
+// SetPluginFetcher sets the plugin list fetcher, mainly used in tests.
+// SetPluginFetcher 设置插件列表获取函数，主要用于测试。
+func (s *Service) SetPluginFetcher(fetcher func(ctx context.Context, version string) ([]Plugin, error)) {
+	if fetcher == nil {
+		s.pluginFetcher = s.fetchPluginsFromDocs
+		return
+	}
+	s.pluginFetcher = fetcher
 }
 
 // ==================== Available Plugins 可用插件 ====================
@@ -186,37 +201,43 @@ func (s *Service) ListAvailablePlugins(ctx context.Context, version string, mirr
 
 	// Get plugins (from cache, online, or fallback)
 	// 获取插件（从缓存、在线或备用列表）
-	plugins := s.getPlugins(ctx, version)
+	plugins, source, cacheHit := s.getPlugins(ctx, version)
 
 	return &AvailablePluginsResponse{
-		Plugins: plugins,
-		Total:   len(plugins),
-		Version: version,
-		Mirror:  string(mirror),
+		Plugins:  plugins,
+		Total:    len(plugins),
+		Version:  version,
+		Mirror:   string(mirror),
+		Source:   source,
+		CacheHit: cacheHit,
 	}, nil
 }
 
 // getPlugins returns the plugin list, using cache if valid, otherwise fetching from Maven.
 // getPlugins 返回插件列表，如果缓存有效则使用缓存，否则从 Maven 获取。
-func (s *Service) getPlugins(ctx context.Context, version string) []Plugin {
+func (s *Service) getPlugins(ctx context.Context, version string) ([]Plugin, PluginListSource, bool) {
 	s.pluginsMu.RLock()
 	// Check if cache is valid / 检查缓存是否有效
 	if plugins, ok := s.cachedPlugins[version]; ok {
 		if cacheTime, exists := s.pluginsCacheTime[version]; exists {
 			if time.Since(cacheTime) < PluginCacheDuration {
 				s.pluginsMu.RUnlock()
-				return plugins
+				return plugins, PluginListSourceCache, true
 			}
 		}
 	}
 	s.pluginsMu.RUnlock()
 
 	// Fetch from Maven repository / 从 Maven 仓库获取
-	plugins, err := s.fetchPluginsFromDocs(ctx, version)
+	fetcher := s.pluginFetcher
+	if fetcher == nil {
+		fetcher = s.fetchPluginsFromDocs
+	}
+	plugins, err := fetcher(ctx, version)
 	if err != nil {
 		// Return empty list on error / 出错时返回空列表
 		fmt.Printf("[Plugin] Failed to fetch plugins from Maven: %v\n", err)
-		return []Plugin{}
+		return []Plugin{}, PluginListSourceRemote, false
 	}
 
 	// Update cache / 更新缓存
@@ -225,7 +246,7 @@ func (s *Service) getPlugins(ctx context.Context, version string) []Plugin {
 	s.pluginsCacheTime[version] = time.Now()
 	s.pluginsMu.Unlock()
 
-	return plugins
+	return plugins, PluginListSourceRemote, false
 }
 
 // fetchPluginsFromDocs fetches plugin list from Maven repository.
@@ -438,7 +459,7 @@ func (s *Service) GetPluginInfo(ctx context.Context, name string, version string
 	s.pluginsMu.RUnlock()
 
 	// If not found in cache, try to fetch from Maven / 如果缓存中没有，尝试从 Maven 获取
-	fetchedPlugins := s.getPlugins(ctx, version)
+	fetchedPlugins, _, _ := s.getPlugins(ctx, version)
 	for _, p := range fetchedPlugins {
 		if strings.ToLower(p.Name) == normalizedName {
 			return &p, nil
@@ -677,7 +698,7 @@ func (s *Service) DownloadAllPlugins(ctx context.Context, version string, mirror
 	}
 
 	// Get all available plugins / 获取所有可用插件
-	plugins := s.getPlugins(ctx, version)
+	plugins, _, _ := s.getPlugins(ctx, version)
 	if len(plugins) == 0 {
 		return nil, fmt.Errorf("no plugins found for version %s / 未找到版本 %s 的插件", version, version)
 	}
