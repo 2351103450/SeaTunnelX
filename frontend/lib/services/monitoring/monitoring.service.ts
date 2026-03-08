@@ -21,11 +21,15 @@ import type {
   MonitoringOverviewData,
   NotificationChannel,
   NotificationChannelListData,
+  NotificationChannelTestResult,
+  NotificationRoute,
+  NotificationRouteListData,
   PlatformHealthData,
   RemoteAlertFilterParams,
   RemoteAlertListData,
   SilenceAlertRequest,
   UpsertNotificationChannelRequest,
+  UpsertNotificationRouteRequest,
   UpdateAlertRuleRequest,
 } from './types';
 
@@ -234,6 +238,56 @@ export class MonitoringService extends BaseService {
    */
   static async deleteNotificationChannel(id: number): Promise<{id: number}> {
     return this.delete<{id: number}>(`/notification-channels/${id}`);
+  }
+
+  /**
+   * Test one notification channel.
+   * 测试一个通知渠道。
+   */
+  static async testNotificationChannel(
+    id: number,
+  ): Promise<NotificationChannelTestResult> {
+    return this.post<NotificationChannelTestResult>(
+      `/notification-channels/${id}/test`,
+      {},
+    );
+  }
+
+  /**
+   * List notification routes.
+   * 获取通知路由列表。
+   */
+  static async listNotificationRoutes(): Promise<NotificationRouteListData> {
+    return this.get<NotificationRouteListData>('/notification-routes');
+  }
+
+  /**
+   * Create notification route.
+   * 创建通知路由。
+   */
+  static async createNotificationRoute(
+    payload: UpsertNotificationRouteRequest,
+  ): Promise<NotificationRoute> {
+    return this.post<NotificationRoute>('/notification-routes', payload);
+  }
+
+  /**
+   * Update notification route.
+   * 更新通知路由。
+   */
+  static async updateNotificationRoute(
+    id: number,
+    payload: UpsertNotificationRouteRequest,
+  ): Promise<NotificationRoute> {
+    return this.put<NotificationRoute>(`/notification-routes/${id}`, payload);
+  }
+
+  /**
+   * Delete notification route.
+   * 删除通知路由。
+   */
+  static async deleteNotificationRoute(id: number): Promise<{id: number}> {
+    return this.delete<{id: number}>(`/notification-routes/${id}`);
   }
 
   // ==================== Safe Methods 安全方法 ====================
@@ -594,6 +648,106 @@ export class MonitoringService extends BaseService {
           error instanceof Error
             ? error.message
             : 'Failed to delete notification channel',
+      };
+    }
+  }
+
+  static async testNotificationChannelSafe(id: number): Promise<{
+    success: boolean;
+    data?: NotificationChannelTestResult;
+    error?: string;
+  }> {
+    try {
+      const data = await this.testNotificationChannel(id);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to test notification channel',
+      };
+    }
+  }
+
+  static async listNotificationRoutesSafe(): Promise<{
+    success: boolean;
+    data?: NotificationRouteListData;
+    error?: string;
+  }> {
+    try {
+      const data = await this.listNotificationRoutes();
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to list notification routes',
+      };
+    }
+  }
+
+  static async createNotificationRouteSafe(
+    payload: UpsertNotificationRouteRequest,
+  ): Promise<{
+    success: boolean;
+    data?: NotificationRoute;
+    error?: string;
+  }> {
+    try {
+      const data = await this.createNotificationRoute(payload);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to create notification route',
+      };
+    }
+  }
+
+  static async updateNotificationRouteSafe(
+    id: number,
+    payload: UpsertNotificationRouteRequest,
+  ): Promise<{
+    success: boolean;
+    data?: NotificationRoute;
+    error?: string;
+  }> {
+    try {
+      const data = await this.updateNotificationRoute(id, payload);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to update notification route',
+      };
+    }
+  }
+
+  static async deleteNotificationRouteSafe(id: number): Promise<{
+    success: boolean;
+    data?: {id: number};
+    error?: string;
+  }> {
+    try {
+      const data = await this.deleteNotificationRoute(id);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to delete notification route',
       };
     }
   }

@@ -21,6 +21,7 @@ package monitoring
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/seatunnel/seatunnelX/internal/apps/monitor"
@@ -494,6 +495,88 @@ type NotificationChannelListData struct {
 	GeneratedAt time.Time                 `json:"generated_at"`
 	Total       int                       `json:"total"`
 	Channels    []*NotificationChannelDTO `json:"channels"`
+}
+
+// NotificationChannelTestResult represents one test-send result for a channel.
+// NotificationChannelTestResult 表示通知渠道一次测试发送结果。
+type NotificationChannelTestResult struct {
+	ChannelID    uint       `json:"channel_id"`
+	DeliveryID   uint       `json:"delivery_id"`
+	Status       string     `json:"status"`
+	SentAt       *time.Time `json:"sent_at,omitempty"`
+	LastError    string     `json:"last_error,omitempty"`
+	StatusCode   int        `json:"status_code,omitempty"`
+	ResponseBody string     `json:"response_body,omitempty"`
+}
+
+// NotificationRouteDTO is frontend DTO for notification routes.
+// NotificationRouteDTO 是前端使用的通知路由 DTO。
+type NotificationRouteDTO struct {
+	ID                 uint      `json:"id"`
+	Name               string    `json:"name"`
+	Enabled            bool      `json:"enabled"`
+	SourceType         string    `json:"source_type,omitempty"`
+	ClusterID          string    `json:"cluster_id,omitempty"`
+	Severity           string    `json:"severity,omitempty"`
+	RuleKey            string    `json:"rule_key,omitempty"`
+	ChannelID          uint      `json:"channel_id"`
+	SendResolved       bool      `json:"send_resolved"`
+	MuteIfAcknowledged bool      `json:"mute_if_acknowledged"`
+	MuteIfSilenced     bool      `json:"mute_if_silenced"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+// NotificationRouteListData represents notification route list payload.
+// NotificationRouteListData 表示通知路由列表响应。
+type NotificationRouteListData struct {
+	GeneratedAt time.Time               `json:"generated_at"`
+	Total       int                     `json:"total"`
+	Routes      []*NotificationRouteDTO `json:"routes"`
+}
+
+// UpsertNotificationRouteRequest represents create/update route payload.
+// UpsertNotificationRouteRequest 表示新增/更新通知路由请求。
+type UpsertNotificationRouteRequest struct {
+	Name               string `json:"name"`
+	Enabled            *bool  `json:"enabled"`
+	SourceType         string `json:"source_type"`
+	ClusterID          string `json:"cluster_id"`
+	Severity           string `json:"severity"`
+	RuleKey            string `json:"rule_key"`
+	ChannelID          uint   `json:"channel_id"`
+	SendResolved       *bool  `json:"send_resolved"`
+	MuteIfAcknowledged *bool  `json:"mute_if_acknowledged"`
+	MuteIfSilenced     *bool  `json:"mute_if_silenced"`
+}
+
+// Validate validates notification route request.
+// Validate 验证通知路由请求参数。
+func (r *UpsertNotificationRouteRequest) Validate() error {
+	if r == nil {
+		return fmt.Errorf("empty request")
+	}
+	if strings.TrimSpace(r.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	if r.ChannelID == 0 {
+		return fmt.Errorf("channel_id is required")
+	}
+	if r.SourceType != "" {
+		switch AlertSourceType(strings.TrimSpace(r.SourceType)) {
+		case AlertSourceTypeLocalProcessEvent, AlertSourceTypeRemoteAlertmanager:
+		default:
+			return fmt.Errorf("invalid source_type")
+		}
+	}
+	if r.Severity != "" {
+		switch AlertSeverity(strings.TrimSpace(r.Severity)) {
+		case AlertSeverityWarning, AlertSeverityCritical:
+		default:
+			return fmt.Errorf("invalid severity")
+		}
+	}
+	return nil
 }
 
 // UpsertNotificationChannelRequest represents create/update channel payload.

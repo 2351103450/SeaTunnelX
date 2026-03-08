@@ -379,3 +379,48 @@ export interface UpsertNotificationChannelRequest {
   secret?: string;
   description?: string;
 }
+
+export interface NotificationChannelTestResult {
+  channel_id: number;
+  delivery_id: number;
+  status: string;
+  sent_at?: string | null;
+  last_error?: string;
+  status_code?: number;
+  response_body?: string;
+}
+
+export interface NotificationRoute {
+  id: number;
+  name: string;
+  enabled: boolean;
+  source_type?: AlertSourceType | '' | string;
+  cluster_id?: string;
+  severity?: AlertSeverity | '' | string;
+  rule_key?: string;
+  channel_id: number;
+  send_resolved: boolean;
+  mute_if_acknowledged: boolean;
+  mute_if_silenced: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationRouteListData {
+  generated_at: string;
+  total: number;
+  routes: NotificationRoute[];
+}
+
+export interface UpsertNotificationRouteRequest {
+  name: string;
+  enabled?: boolean;
+  source_type?: AlertSourceType | '';
+  cluster_id?: string;
+  severity?: AlertSeverity | '';
+  rule_key?: string;
+  channel_id: number;
+  send_resolved?: boolean;
+  mute_if_acknowledged?: boolean;
+  mute_if_silenced?: boolean;
+}

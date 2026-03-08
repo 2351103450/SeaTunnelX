@@ -348,6 +348,11 @@ func Serve() {
 				monitoringRouter.POST("/notification-channels", monitoringHandler.CreateNotificationChannel)
 				monitoringRouter.PUT("/notification-channels/:id", monitoringHandler.UpdateNotificationChannel)
 				monitoringRouter.DELETE("/notification-channels/:id", monitoringHandler.DeleteNotificationChannel)
+				monitoringRouter.POST("/notification-channels/:id/test", monitoringHandler.TestNotificationChannel)
+				monitoringRouter.GET("/notification-routes", monitoringHandler.ListNotificationRoutes)
+				monitoringRouter.POST("/notification-routes", monitoringHandler.CreateNotificationRoute)
+				monitoringRouter.PUT("/notification-routes/:id", monitoringHandler.UpdateNotificationRoute)
+				monitoringRouter.DELETE("/notification-routes/:id", monitoringHandler.DeleteNotificationRoute)
 			}
 
 			// Platform cluster health summary (powered by monitoring remote integration).

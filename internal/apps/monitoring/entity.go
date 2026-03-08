@@ -128,6 +128,56 @@ func (NotificationChannel) TableName() string {
 	return "monitoring_notification_channels"
 }
 
+// NotificationRoute represents one route from alert match condition to channel.
+// NotificationRoute 表示一条从告警匹配条件到通知渠道的路由规则。
+type NotificationRoute struct {
+	ID                 uint      `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name               string    `json:"name" gorm:"size:120;not null;index"`
+	Enabled            bool      `json:"enabled" gorm:"default:true"`
+	SourceType         string    `json:"source_type" gorm:"size:40;index"`
+	ClusterID          string    `json:"cluster_id" gorm:"size:64;index"`
+	Severity           string    `json:"severity" gorm:"size:20;index"`
+	RuleKey            string    `json:"rule_key" gorm:"size:80;index"`
+	ChannelID          uint      `json:"channel_id" gorm:"not null;index"`
+	SendResolved       bool      `json:"send_resolved" gorm:"default:true"`
+	MuteIfAcknowledged bool      `json:"mute_if_acknowledged" gorm:"default:true"`
+	MuteIfSilenced     bool      `json:"mute_if_silenced" gorm:"default:true"`
+	CreatedAt          time.Time `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt          time.Time `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName specifies the table name for NotificationRoute.
+// TableName 指定 NotificationRoute 表名。
+func (NotificationRoute) TableName() string {
+	return "monitoring_notification_routes"
+}
+
+// NotificationDelivery represents one notification delivery record.
+// NotificationDelivery 表示一条通知投递记录。
+type NotificationDelivery struct {
+	ID                  uint       `json:"id" gorm:"primaryKey;autoIncrement"`
+	AlertID             string     `json:"alert_id" gorm:"size:255;index"`
+	SourceType          string     `json:"source_type" gorm:"size:40;index"`
+	SourceKey           string     `json:"source_key" gorm:"size:255;index"`
+	ChannelID           uint       `json:"channel_id" gorm:"not null;index"`
+	EventType           string     `json:"event_type" gorm:"size:20;not null;index"`
+	Status              string     `json:"status" gorm:"size:20;not null;index"`
+	AttemptCount        int        `json:"attempt_count" gorm:"default:0"`
+	LastError           string     `json:"last_error" gorm:"type:text"`
+	RequestPayload      string     `json:"request_payload" gorm:"type:text"`
+	ResponseStatusCode  int        `json:"response_status_code"`
+	ResponseBodyExcerpt string     `json:"response_body_excerpt" gorm:"type:text"`
+	SentAt              *time.Time `json:"sent_at"`
+	CreatedAt           time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt           time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName specifies the table name for NotificationDelivery.
+// TableName 指定 NotificationDelivery 表名。
+func (NotificationDelivery) TableName() string {
+	return "monitoring_notification_deliveries"
+}
+
 // RemoteAlertRecord stores one Alertmanager webhook alert after normalization.
 // RemoteAlertRecord 保存标准化后的 Alertmanager webhook 告警记录。
 type RemoteAlertRecord struct {

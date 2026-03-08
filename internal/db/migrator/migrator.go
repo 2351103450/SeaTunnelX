@@ -71,24 +71,26 @@ func Migrate() {
 		&project.ProjectItem{}, // 项目条目表 / Project item table
 		&project.ProjectTag{},  // 项目标签表 / Project tag table
 		&project.ProjectReport{},
-		&audit.CommandLog{},                  // 命令日志表 / Command log table
-		&audit.AuditLog{},                    // 审计日志表 / Audit log table
-		&plugin.InstalledPlugin{},            // 已安装插件表 / Installed plugin table
-		&plugin.PluginDependencyConfig{},     // 插件依赖配置表 / Plugin dependency config table
-		&appconfig.Config{},                  // 配置文件表 / Config file table
-		&appconfig.ConfigVersion{},           // 配置版本表 / Config version table
-		&monitor.MonitorConfig{},             // 监控配置表 / Monitor config table (Requirements: 5.2)
-		&monitor.ProcessEvent{},              // 进程事件表 / Process event table (Requirements: 6.1)
-		&monitoringapp.AlertRule{},           // 监控告警规则表 / Monitoring alert rule table
-		&monitoringapp.AlertEventState{},     // 告警事件状态表 / Alert event state table
-		&monitoringapp.AlertState{},          // 统一告警状态表 / Unified alert state table
-		&monitoringapp.NotificationChannel{}, // 通知渠道表 / Notification channel table
-		&monitoringapp.RemoteAlertRecord{},   // 远程告警记录表 / Remote alert record table
-		&stupgrade.UpgradePlanRecord{},       // SeaTunnel 升级计划表 / SeaTunnel upgrade plan table
-		&stupgrade.UpgradeTask{},             // SeaTunnel 升级任务表 / SeaTunnel upgrade task table
-		&stupgrade.UpgradeTaskStep{},         // SeaTunnel 升级步骤表 / SeaTunnel upgrade step table
-		&stupgrade.UpgradeNodeExecution{},    // SeaTunnel 升级节点执行表 / SeaTunnel upgrade node execution table
-		&stupgrade.UpgradeStepLog{},          // SeaTunnel 升级日志表 / SeaTunnel upgrade log table
+		&audit.CommandLog{},                   // 命令日志表 / Command log table
+		&audit.AuditLog{},                     // 审计日志表 / Audit log table
+		&plugin.InstalledPlugin{},             // 已安装插件表 / Installed plugin table
+		&plugin.PluginDependencyConfig{},      // 插件依赖配置表 / Plugin dependency config table
+		&appconfig.Config{},                   // 配置文件表 / Config file table
+		&appconfig.ConfigVersion{},            // 配置版本表 / Config version table
+		&monitor.MonitorConfig{},              // 监控配置表 / Monitor config table (Requirements: 5.2)
+		&monitor.ProcessEvent{},               // 进程事件表 / Process event table (Requirements: 6.1)
+		&monitoringapp.AlertRule{},            // 监控告警规则表 / Monitoring alert rule table
+		&monitoringapp.AlertEventState{},      // 告警事件状态表 / Alert event state table
+		&monitoringapp.AlertState{},           // 统一告警状态表 / Unified alert state table
+		&monitoringapp.NotificationChannel{},  // 通知渠道表 / Notification channel table
+		&monitoringapp.NotificationRoute{},    // 通知路由表 / Notification route table
+		&monitoringapp.NotificationDelivery{}, // 通知投递记录表 / Notification delivery table
+		&monitoringapp.RemoteAlertRecord{},    // 远程告警记录表 / Remote alert record table
+		&stupgrade.UpgradePlanRecord{},        // SeaTunnel 升级计划表 / SeaTunnel upgrade plan table
+		&stupgrade.UpgradeTask{},              // SeaTunnel 升级任务表 / SeaTunnel upgrade task table
+		&stupgrade.UpgradeTaskStep{},          // SeaTunnel 升级步骤表 / SeaTunnel upgrade step table
+		&stupgrade.UpgradeNodeExecution{},     // SeaTunnel 升级节点执行表 / SeaTunnel upgrade node execution table
+		&stupgrade.UpgradeStepLog{},           // SeaTunnel 升级日志表 / SeaTunnel upgrade log table
 	); err != nil {
 		log.Fatalf("[Database] auto migrate failed: %v\n", err)
 	}
