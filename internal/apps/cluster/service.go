@@ -569,12 +569,6 @@ func (s *Service) AddNode(ctx context.Context, clusterID uint, req *AddNodeReque
 		return nil, err
 	}
 
-	// Validate hazelcast port is provided (required field)
-	// 验证 Hazelcast 端口已提供（必填字段）
-	if req.HazelcastPort <= 0 || req.HazelcastPort > 65535 {
-		return nil, ErrInvalidHazelcastPort
-	}
-
 	// Check if host exists and has Agent installed
 	// 检查主机是否存在且已安装 Agent
 	if s.hostProvider != nil {
@@ -611,6 +605,12 @@ func (s *Service) AddNode(ctx context.Context, clusterID uint, req *AddNodeReque
 		} else {
 			hazelcastPort = DefaultPorts.WorkerHazelcast
 		}
+	}
+
+	// Validate resolved hazelcast port value
+	// 验证最终解析出的 Hazelcast 端口值
+	if hazelcastPort <= 0 || hazelcastPort > 65535 {
+		return nil, ErrInvalidHazelcastPort
 	}
 
 	// API port is optional for Master nodes

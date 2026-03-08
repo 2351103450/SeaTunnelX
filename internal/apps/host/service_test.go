@@ -196,7 +196,7 @@ func TestProperty_AgentRegistrationIPMatching(t *testing.T) {
 		genAgentVersion(),
 	))
 
-	properties.Property("agent registration fails when IP does not match any host", prop.ForAll(
+	properties.Property("agent registration auto-creates host when IP does not match any host", prop.ForAll(
 		func(hostName string, hostIP string, agentIP string, agentID string, version string) bool {
 			// Skip if IPs are the same
 			// 如果 IP 相同则跳过
@@ -223,13 +223,42 @@ func TestProperty_AgentRegistrationIPMatching(t *testing.T) {
 				return false
 			}
 
-			// Try to register agent with different IP
-			// 尝试使用不同的 IP 注册 Agent
-			_, err = svc.UpdateAgentStatus(ctx, agentIP, agentID, version, nil, "")
+			// Register agent with different IP; service should auto-create host
+			// 使用不同的 IP 注册 Agent；服务应自动创建主机
+			updatedHost, err := svc.UpdateAgentStatus(ctx, agentIP, agentID, version, nil, "")
+			if err != nil {
+				t.Logf("Failed to auto-create host during agent registration: %v", err)
+				return false
+			}
 
-			// Should fail with ErrHostNotFound
-			// 应该返回 ErrHostNotFound 错误
-			return err == ErrHostNotFound
+			if updatedHost.IPAddress != agentIP {
+				t.Logf("Auto-created host IP mismatch: expected %s, got %s", agentIP, updatedHost.IPAddress)
+				return false
+			}
+			if updatedHost.AgentStatus != AgentStatusInstalled {
+				t.Logf("Auto-created host status should be installed, got: %s", updatedHost.AgentStatus)
+				return false
+			}
+			if updatedHost.AgentID != agentID {
+				t.Logf("Auto-created host agent ID should be %s, got: %s", agentID, updatedHost.AgentID)
+				return false
+			}
+			if updatedHost.AgentVersion != version {
+				t.Logf("Auto-created host version should be %s, got: %s", version, updatedHost.AgentVersion)
+				return false
+			}
+
+			hostByIP, err := svc.GetByIP(ctx, agentIP)
+			if err != nil {
+				t.Logf("Failed to get auto-created host by IP: %v", err)
+				return false
+			}
+			if hostByIP.ID != updatedHost.ID {
+				t.Logf("Auto-created host ID mismatch: expected %d, got %d", updatedHost.ID, hostByIP.ID)
+				return false
+			}
+
+			return true
 		},
 		genServiceValidHostName(),
 		genServiceValidIPv4(),

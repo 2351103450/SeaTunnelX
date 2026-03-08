@@ -229,7 +229,7 @@ func TestRegisterRPC(t *testing.T) {
 		assert.Equal(t, "test-host", agentConn.Hostname)
 	})
 
-	t.Run("registration without agent_id fails", func(t *testing.T) {
+	t.Run("registration without agent_id auto assigns id", func(t *testing.T) {
 		req := &pb.RegisterRequest{
 			Hostname:  "test-host",
 			IpAddress: "192.168.1.101",
@@ -237,8 +237,14 @@ func TestRegisterRPC(t *testing.T) {
 
 		resp, err := client.Register(ctx, req)
 		require.NoError(t, err)
-		assert.False(t, resp.Success)
-		assert.Contains(t, resp.Message, "agent_id is required")
+		assert.True(t, resp.Success)
+		assert.NotEmpty(t, resp.AssignedId)
+		assert.NotNil(t, resp.Config)
+
+		agentConn, ok := ts.agentManager.GetAgent(resp.AssignedId)
+		assert.True(t, ok)
+		assert.Equal(t, "192.168.1.101", agentConn.IPAddress)
+		assert.Equal(t, "test-host", agentConn.Hostname)
 	})
 
 	t.Run("registration without ip_address fails", func(t *testing.T) {

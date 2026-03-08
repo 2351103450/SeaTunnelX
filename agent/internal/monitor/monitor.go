@@ -66,6 +66,7 @@ type TrackedProcess struct {
 	InstallDir       string               `json:"install_dir"`
 	Role             string               `json:"role"`
 	Status           ProcessStatus        `json:"status"`
+	ManuallyStopped  bool                 `json:"manually_stopped"`  // 是否手动停止 / Whether manually stopped
 	Restarting       bool                 `json:"restarting"`        // 是否正在重启 / Whether restarting
 	ConsecutiveFails int                  `json:"consecutive_fails"` // 连续检查失败次数 / Consecutive check failures
 	LastCheck        time.Time            `json:"last_check"`
@@ -258,6 +259,17 @@ func (m *ProcessMonitor) checkAllProcesses() {
 		alive := isProcessAlive(proc.PID)
 		proc.LastCheck = time.Now()
 
+		if proc.ManuallyStopped {
+			if alive {
+				proc.Status = StatusRunning
+			} else {
+				proc.Status = StatusStopped
+			}
+			proc.ConsecutiveFails = 0
+			proc.Restarting = false
+			continue
+		}
+
 		if alive {
 			// Process is running / 进程正在运行
 			proc.Status = StatusRunning
@@ -332,6 +344,7 @@ func (m *ProcessMonitor) TrackProcessWithEvent(name string, pid int, installDir,
 		InstallDir:       installDir,
 		Role:             role,
 		Status:           StatusRunning,
+		ManuallyStopped:  false,
 		ConsecutiveFails: 0,
 		LastCheck:        time.Now(),
 		StartParams:      startParams,
@@ -413,6 +426,42 @@ func (m *ProcessMonitor) UpdateProcessPID(name string, newPID int) {
 		ctx := context.Background()
 		logger.InfoF(ctx, "[ProcessMonitor] Updated process PID: %s -> %d / 更新进程 PID：%s -> %d", name, newPID, name, newPID)
 	}
+}
+
+// MarkManuallyStopped marks one tracked process as manually stopped.
+// MarkManuallyStopped 将一个跟踪中的进程标记为手动停止。
+func (m *ProcessMonitor) MarkManuallyStopped(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if proc, exists := m.trackedProcesses[name]; exists {
+		proc.ManuallyStopped = true
+		proc.Restarting = false
+		proc.ConsecutiveFails = 0
+	}
+}
+
+// ClearManuallyStopped clears the manual-stop flag for one tracked process.
+// ClearManuallyStopped 清除一个跟踪中的进程的手动停止标记。
+func (m *ProcessMonitor) ClearManuallyStopped(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if proc, exists := m.trackedProcesses[name]; exists {
+		proc.ManuallyStopped = false
+	}
+}
+
+// IsManuallyStopped returns whether one tracked process is manually stopped.
+// IsManuallyStopped 返回一个跟踪中的进程是否被手动停止。
+func (m *ProcessMonitor) IsManuallyStopped(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if proc, exists := m.trackedProcesses[name]; exists {
+		return proc.ManuallyStopped
+	}
+	return false
 }
 
 // GetTrackedProcess returns a tracked process by name

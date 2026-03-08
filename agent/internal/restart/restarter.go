@@ -187,7 +187,17 @@ func (r *AutoRestarter) ShouldRestart(proc *monitor.TrackedProcess) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if proc == nil {
+		return false
+	}
+
 	if !r.config.Enabled {
+		return false
+	}
+
+	if proc.ManuallyStopped {
+		logger.InfoF(ctx, "[AutoRestarter] Process %s is manually stopped, skipping restart / 进程 %s 已被手动停止，跳过自动重启",
+			proc.Name, proc.Name)
 		return false
 	}
 
