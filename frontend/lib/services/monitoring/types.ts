@@ -130,6 +130,83 @@ export interface AlertListData {
   alerts: AlertEvent[];
 }
 
+export type AlertSourceType = 'local_process_event' | 'remote_alertmanager';
+export type AlertLifecycleStatus = 'firing' | 'resolved';
+export type AlertHandlingStatus = 'pending' | 'acknowledged' | 'silenced';
+
+export interface AlertInstanceStats {
+  firing: number;
+  resolved: number;
+  pending: number;
+  acknowledged: number;
+  silenced: number;
+}
+
+export interface AlertInstanceSourceRef {
+  event_id?: number;
+  fingerprint?: string;
+  event_type?: string;
+  process_name?: string;
+  hostname?: string;
+  receiver?: string;
+  env?: string;
+}
+
+export interface AlertInstance {
+  alert_id: string;
+  source_type: AlertSourceType;
+  cluster_id: string;
+  cluster_name: string;
+  severity: AlertSeverity | string;
+  alert_name: string;
+  rule_key: string;
+  summary: string;
+  description: string;
+  lifecycle_status: AlertLifecycleStatus;
+  handling_status: AlertHandlingStatus;
+  created_at: string;
+  firing_at: string;
+  resolved_at?: string | null;
+  last_seen_at: string;
+  acknowledged_by?: string;
+  acknowledged_at?: string | null;
+  silenced_by?: string;
+  silenced_until?: string | null;
+  latest_note?: string;
+  source_ref?: AlertInstanceSourceRef | null;
+}
+
+export interface AlertInstanceListData {
+  generated_at: string;
+  page: number;
+  page_size: number;
+  total: number;
+  stats: AlertInstanceStats;
+  alerts: AlertInstance[];
+}
+
+export interface AlertInstanceFilterParams {
+  source_type?: AlertSourceType;
+  cluster_id?: string;
+  severity?: AlertSeverity;
+  lifecycle_status?: AlertLifecycleStatus;
+  handling_status?: AlertHandlingStatus;
+  start_time?: string;
+  end_time?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AlertInstanceActionResult {
+  alert_id: string;
+  handling_status: AlertHandlingStatus;
+  acknowledged_by?: string;
+  acknowledged_at?: string | null;
+  silenced_by?: string;
+  silenced_until?: string | null;
+  latest_note?: string;
+}
+
 export interface AlertFilterParams {
   cluster_id?: number;
   status?: AlertStatus;

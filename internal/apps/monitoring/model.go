@@ -168,6 +168,48 @@ const (
 	AlertStatusSilenced AlertStatus = "silenced"
 )
 
+// AlertSourceType represents where one unified alert comes from.
+// AlertSourceType 表示统一告警的来源类型。
+type AlertSourceType string
+
+const (
+	// AlertSourceTypeLocalProcessEvent indicates a locally detected process event.
+	// AlertSourceTypeLocalProcessEvent 表示本地进程事件告警。
+	AlertSourceTypeLocalProcessEvent AlertSourceType = "local_process_event"
+	// AlertSourceTypeRemoteAlertmanager indicates a remote alert ingested from Alertmanager.
+	// AlertSourceTypeRemoteAlertmanager 表示从 Alertmanager 回流的远程告警。
+	AlertSourceTypeRemoteAlertmanager AlertSourceType = "remote_alertmanager"
+)
+
+// AlertLifecycleStatus represents the source alert lifecycle.
+// AlertLifecycleStatus 表示源告警生命周期状态。
+type AlertLifecycleStatus string
+
+const (
+	// AlertLifecycleStatusFiring indicates alert is currently firing.
+	// AlertLifecycleStatusFiring 表示告警正在触发。
+	AlertLifecycleStatusFiring AlertLifecycleStatus = "firing"
+	// AlertLifecycleStatusResolved indicates alert is resolved.
+	// AlertLifecycleStatusResolved 表示告警已恢复。
+	AlertLifecycleStatusResolved AlertLifecycleStatus = "resolved"
+)
+
+// AlertHandlingStatus represents manual handling state over a unified alert.
+// AlertHandlingStatus 表示统一告警上的人工处理状态。
+type AlertHandlingStatus string
+
+const (
+	// AlertHandlingStatusPending indicates no manual handling is applied.
+	// AlertHandlingStatusPending 表示尚未进行人工处理。
+	AlertHandlingStatusPending AlertHandlingStatus = "pending"
+	// AlertHandlingStatusAcknowledged indicates alert has been acknowledged.
+	// AlertHandlingStatusAcknowledged 表示告警已确认。
+	AlertHandlingStatusAcknowledged AlertHandlingStatus = "acknowledged"
+	// AlertHandlingStatusSilenced indicates alert is temporarily silenced.
+	// AlertHandlingStatusSilenced 表示告警已静默。
+	AlertHandlingStatusSilenced AlertHandlingStatus = "silenced"
+)
+
 const (
 	// AlertRuleKeyProcessCrashed is the rule key for process crashed events.
 	// AlertRuleKeyProcessCrashed 是进程崩溃规则键。
@@ -197,6 +239,79 @@ type AlertStats struct {
 	Firing       int64 `json:"firing"`
 	Acknowledged int64 `json:"acknowledged"`
 	Silenced     int64 `json:"silenced"`
+}
+
+// AlertInstanceFilter represents filters for unified alert instances.
+// AlertInstanceFilter 表示统一告警实例查询过滤条件。
+type AlertInstanceFilter struct {
+	SourceType      AlertSourceType      `json:"source_type"`
+	ClusterID       string               `json:"cluster_id"`
+	Severity        AlertSeverity        `json:"severity"`
+	LifecycleStatus AlertLifecycleStatus `json:"lifecycle_status"`
+	HandlingStatus  AlertHandlingStatus  `json:"handling_status"`
+	StartTime       *time.Time           `json:"start_time"`
+	EndTime         *time.Time           `json:"end_time"`
+	Page            int                  `json:"page"`
+	PageSize        int                  `json:"page_size"`
+}
+
+// AlertInstanceStats summarizes unified alert counts.
+// AlertInstanceStats 汇总统一告警数量统计。
+type AlertInstanceStats struct {
+	Firing       int64 `json:"firing"`
+	Resolved     int64 `json:"resolved"`
+	Pending      int64 `json:"pending"`
+	Acknowledged int64 `json:"acknowledged"`
+	Silenced     int64 `json:"silenced"`
+}
+
+// AlertInstance represents one normalized alert item for frontend.
+// AlertInstance 表示返回给前端的统一告警项。
+type AlertInstance struct {
+	AlertID         string                  `json:"alert_id"`
+	SourceType      AlertSourceType         `json:"source_type"`
+	ClusterID       string                  `json:"cluster_id"`
+	ClusterName     string                  `json:"cluster_name"`
+	Severity        AlertSeverity           `json:"severity"`
+	AlertName       string                  `json:"alert_name"`
+	RuleKey         string                  `json:"rule_key"`
+	Summary         string                  `json:"summary"`
+	Description     string                  `json:"description"`
+	LifecycleStatus AlertLifecycleStatus    `json:"lifecycle_status"`
+	HandlingStatus  AlertHandlingStatus     `json:"handling_status"`
+	CreatedAt       time.Time               `json:"created_at"`
+	FiringAt        time.Time               `json:"firing_at"`
+	ResolvedAt      *time.Time              `json:"resolved_at,omitempty"`
+	LastSeenAt      time.Time               `json:"last_seen_at"`
+	AcknowledgedBy  string                  `json:"acknowledged_by,omitempty"`
+	AcknowledgedAt  *time.Time              `json:"acknowledged_at,omitempty"`
+	SilencedBy      string                  `json:"silenced_by,omitempty"`
+	SilencedUntil   *time.Time              `json:"silenced_until,omitempty"`
+	LatestNote      string                  `json:"latest_note,omitempty"`
+	SourceRef       *AlertInstanceSourceRef `json:"source_ref,omitempty"`
+}
+
+// AlertInstanceSourceRef contains original-source reference info for one alert.
+// AlertInstanceSourceRef 表示统一告警关联的原始来源信息。
+type AlertInstanceSourceRef struct {
+	EventID     uint   `json:"event_id,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	EventType   string `json:"event_type,omitempty"`
+	ProcessName string `json:"process_name,omitempty"`
+	Hostname    string `json:"hostname,omitempty"`
+	Receiver    string `json:"receiver,omitempty"`
+	Env         string `json:"env,omitempty"`
+}
+
+// AlertInstanceListData represents unified alert list response payload.
+// AlertInstanceListData 表示统一告警列表响应数据。
+type AlertInstanceListData struct {
+	GeneratedAt time.Time           `json:"generated_at"`
+	Page        int                 `json:"page"`
+	PageSize    int                 `json:"page_size"`
+	Total       int64               `json:"total"`
+	Stats       *AlertInstanceStats `json:"stats"`
+	Alerts      []*AlertInstance    `json:"alerts"`
 }
 
 // AlertEvent represents one alert item in alert center.
@@ -328,6 +443,18 @@ type AlertActionResult struct {
 	SilencedBy       string      `json:"silenced_by,omitempty"`
 	SilencedUntil    *time.Time  `json:"silenced_until,omitempty"`
 	LatestActionNote string      `json:"latest_action_note,omitempty"`
+}
+
+// AlertInstanceActionResult represents action result on one unified alert instance.
+// AlertInstanceActionResult 表示统一告警实例上的动作结果。
+type AlertInstanceActionResult struct {
+	AlertID        string              `json:"alert_id"`
+	HandlingStatus AlertHandlingStatus `json:"handling_status"`
+	AcknowledgedBy string              `json:"acknowledged_by,omitempty"`
+	AcknowledgedAt *time.Time          `json:"acknowledged_at,omitempty"`
+	SilencedBy     string              `json:"silenced_by,omitempty"`
+	SilencedUntil  *time.Time          `json:"silenced_until,omitempty"`
+	LatestNote     string              `json:"latest_note,omitempty"`
 }
 
 // IntegrationComponentStatus represents one monitoring stack component status.

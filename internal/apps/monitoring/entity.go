@@ -63,6 +63,29 @@ func (AlertEventState) TableName() string {
 	return "monitoring_alert_event_states"
 }
 
+// AlertState records unified manual handling state for one alert instance.
+// AlertState 记录统一告警实例的人工处理状态。
+type AlertState struct {
+	ID             uint                `json:"id" gorm:"primaryKey;autoIncrement"`
+	SourceType     AlertSourceType     `json:"source_type" gorm:"size:40;not null;index"`
+	SourceKey      string              `json:"source_key" gorm:"size:255;not null;uniqueIndex"`
+	ClusterID      string              `json:"cluster_id" gorm:"size:64;index"`
+	HandlingStatus AlertHandlingStatus `json:"handling_status" gorm:"size:20;not null;index"`
+	AcknowledgedBy string              `json:"acknowledged_by" gorm:"size:100"`
+	AcknowledgedAt *time.Time          `json:"acknowledged_at"`
+	SilencedBy     string              `json:"silenced_by" gorm:"size:100"`
+	SilencedUntil  *time.Time          `json:"silenced_until" gorm:"index"`
+	Note           string              `json:"note" gorm:"type:text"`
+	CreatedAt      time.Time           `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt      time.Time           `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName specifies the table name for AlertState.
+// TableName 指定 AlertState 表名。
+func (AlertState) TableName() string {
+	return "monitoring_alert_states"
+}
+
 // NotificationChannelType represents notification channel type.
 // NotificationChannelType 表示通知渠道类型。
 type NotificationChannelType string

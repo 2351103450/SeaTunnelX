@@ -1314,19 +1314,29 @@
     "alerts": {
       "entry": "Alert Center",
       "title": "Alert Center",
-      "subtitle": "Centralized handling for process crashed, restart failed and restart limit alerts",
+      "subtitle": "Unified view of local process alerts and remote Alertmanager alerts",
       "listTitle": "Alert List",
       "clusterFilter": "Filter by cluster",
       "statusFilter": "Filter by status",
+      "sourceFilter": "Filter by source",
+      "lifecycleStatusFilter": "Filter by lifecycle",
+      "handlingStatusFilter": "Filter by handling",
       "allClusters": "All Clusters",
       "allStatus": "All Status",
+      "allSources": "All Sources",
+      "allLifecycle": "All Lifecycle",
+      "allHandling": "All Handling",
       "cluster": "Cluster",
+      "sourceType": "Source",
       "eventType": "Event Type",
       "severity": "Severity",
       "status": "Status",
+      "lifecycleStatus": "Lifecycle",
+      "handlingStatus": "Handling",
       "host": "Host",
       "process": "Process",
       "eventTime": "Event Time",
+      "lastSeenAt": "Last Seen",
       "noAlerts": "No alerts",
       "ack": "Acknowledge",
       "silence30m": "Silence 30m",
@@ -1343,6 +1353,9 @@
       "totalCount": "Total",
       "firingCount": "Firing",
       "resolvedCount": "Resolved",
+      "pendingCount": "Pending",
+      "acknowledgedCount": "Acknowledged",
+      "silencedCount": "Silenced",
       "otherCount": "Others",
       "startTime": "Start Time",
       "endTime": "End Time",
@@ -1350,7 +1363,20 @@
       "pageSize": "Page Size",
       "prevPage": "Previous",
       "nextPage": "Next",
-      "pageInfo": "Page {current} / {total}"
+      "pageInfo": "Page {current} / {total}",
+      "sourceTypes": {
+        "local_process_event": "Local Process Event",
+        "remote_alertmanager": "Remote Alertmanager"
+      },
+      "lifecycleStatuses": {
+        "firing": "Firing",
+        "resolved": "Resolved"
+      },
+      "handlingStatuses": {
+        "pending": "Pending",
+        "acknowledged": "Acknowledged",
+        "silenced": "Silenced"
+      }
     },
     "rules": {
       "entry": "Alert Rules",

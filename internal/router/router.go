@@ -333,8 +333,11 @@ func Serve() {
 			{
 				monitoringRouter.GET("/overview", monitoringHandler.GetOverview)
 				monitoringRouter.GET("/clusters/:id/overview", monitoringHandler.GetClusterOverview)
+				monitoringRouter.GET("/alert-instances", monitoringHandler.ListAlertInstances)
 				monitoringRouter.GET("/alerts", monitoringHandler.ListAlerts)
 				monitoringRouter.GET("/remote-alerts", monitoringHandler.ListRemoteAlerts)
+				monitoringRouter.POST("/alert-instances/:id/ack", monitoringHandler.AcknowledgeAlertInstance)
+				monitoringRouter.POST("/alert-instances/:id/silence", monitoringHandler.SilenceAlertInstance)
 				monitoringRouter.POST("/alerts/:eventId/ack", monitoringHandler.AcknowledgeAlert)
 				monitoringRouter.POST("/alerts/:eventId/silence", monitoringHandler.SilenceAlert)
 				monitoringRouter.GET("/clusters/:id/rules", monitoringHandler.ListClusterRules)

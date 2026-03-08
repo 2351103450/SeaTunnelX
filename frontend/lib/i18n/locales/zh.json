@@ -1314,19 +1314,29 @@
     "alerts": {
       "entry": "告警中心",
       "title": "告警中心",
-      "subtitle": "集中处理进程崩溃、重启失败、达到重启上限等关键告警",
+      "subtitle": "统一查看本地进程事件告警与远程 Alertmanager 告警",
       "listTitle": "告警列表",
       "clusterFilter": "按集群筛选",
       "statusFilter": "按状态筛选",
+      "sourceFilter": "按来源筛选",
+      "lifecycleStatusFilter": "按生命周期筛选",
+      "handlingStatusFilter": "按处理状态筛选",
       "allClusters": "全部集群",
       "allStatus": "全部状态",
+      "allSources": "全部来源",
+      "allLifecycle": "全部生命周期",
+      "allHandling": "全部处理状态",
       "cluster": "集群",
+      "sourceType": "来源",
       "eventType": "事件类型",
       "severity": "严重级别",
       "status": "状态",
+      "lifecycleStatus": "生命周期",
+      "handlingStatus": "处理状态",
       "host": "主机",
       "process": "进程",
       "eventTime": "事件时间",
+      "lastSeenAt": "最近出现",
       "noAlerts": "暂无告警",
       "ack": "确认",
       "silence30m": "静默30分钟",
@@ -1343,6 +1353,9 @@
       "totalCount": "总数",
       "firingCount": "触发中",
       "resolvedCount": "已恢复",
+      "pendingCount": "待处理",
+      "acknowledgedCount": "已确认",
+      "silencedCount": "已静默",
       "otherCount": "其他",
       "startTime": "开始时间",
       "endTime": "结束时间",
@@ -1350,7 +1363,20 @@
       "pageSize": "每页条数",
       "prevPage": "上一页",
       "nextPage": "下一页",
-      "pageInfo": "第 {current} / {total} 页"
+      "pageInfo": "第 {current} / {total} 页",
+      "sourceTypes": {
+        "local_process_event": "本地进程事件",
+        "remote_alertmanager": "远程 Alertmanager"
+      },
+      "lifecycleStatuses": {
+        "firing": "触发中",
+        "resolved": "已恢复"
+      },
+      "handlingStatuses": {
+        "pending": "待处理",
+        "acknowledged": "已确认",
+        "silenced": "已静默"
+      }
     },
     "rules": {
       "entry": "告警规则",

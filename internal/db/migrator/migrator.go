@@ -81,6 +81,7 @@ func Migrate() {
 		&monitor.ProcessEvent{},              // 进程事件表 / Process event table (Requirements: 6.1)
 		&monitoringapp.AlertRule{},           // 监控告警规则表 / Monitoring alert rule table
 		&monitoringapp.AlertEventState{},     // 告警事件状态表 / Alert event state table
+		&monitoringapp.AlertState{},          // 统一告警状态表 / Unified alert state table
 		&monitoringapp.NotificationChannel{}, // 通知渠道表 / Notification channel table
 		&monitoringapp.RemoteAlertRecord{},   // 远程告警记录表 / Remote alert record table
 		&stupgrade.UpgradePlanRecord{},       // SeaTunnel 升级计划表 / SeaTunnel upgrade plan table

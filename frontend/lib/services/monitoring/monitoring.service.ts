@@ -9,6 +9,9 @@ import type {
   AcknowledgeAlertRequest,
   AlertActionResult,
   AlertFilterParams,
+  AlertInstanceActionResult,
+  AlertInstanceFilterParams,
+  AlertInstanceListData,
   AlertListData,
   AlertRule,
   AlertRuleListData,
@@ -61,6 +64,19 @@ export class MonitoringService extends BaseService {
   }
 
   /**
+   * List unified alert instances for monitoring center.
+   * 获取统一告警实例列表。
+   */
+  static async getAlertInstances(
+    params?: AlertInstanceFilterParams,
+  ): Promise<AlertInstanceListData> {
+    return this.get<AlertInstanceListData>(
+      '/alert-instances',
+      params as Record<string, unknown> | undefined,
+    );
+  }
+
+  /**
    * Acknowledge one alert event.
    * 确认一条告警事件。
    */
@@ -75,6 +91,20 @@ export class MonitoringService extends BaseService {
   }
 
   /**
+   * Acknowledge one unified alert instance.
+   * 确认一条统一告警实例。
+   */
+  static async acknowledgeAlertInstance(
+    alertId: string,
+    payload?: AcknowledgeAlertRequest,
+  ): Promise<AlertInstanceActionResult> {
+    return this.post<AlertInstanceActionResult>(
+      `/alert-instances/${encodeURIComponent(alertId)}/ack`,
+      payload || {},
+    );
+  }
+
+  /**
    * Silence one alert event.
    * 静默一条告警事件。
    */
@@ -83,6 +113,20 @@ export class MonitoringService extends BaseService {
     payload: SilenceAlertRequest,
   ): Promise<AlertActionResult> {
     return this.post<AlertActionResult>(`/alerts/${eventId}/silence`, payload);
+  }
+
+  /**
+   * Silence one unified alert instance.
+   * 静默一条统一告警实例。
+   */
+  static async silenceAlertInstance(
+    alertId: string,
+    payload: SilenceAlertRequest,
+  ): Promise<AlertInstanceActionResult> {
+    return this.post<AlertInstanceActionResult>(
+      `/alert-instances/${encodeURIComponent(alertId)}/silence`,
+      payload,
+    );
   }
 
   /**
@@ -248,6 +292,27 @@ export class MonitoringService extends BaseService {
     }
   }
 
+  static async getAlertInstancesSafe(
+    params?: AlertInstanceFilterParams,
+  ): Promise<{
+    success: boolean;
+    data?: AlertInstanceListData;
+    error?: string;
+  }> {
+    try {
+      const data = await this.getAlertInstances(params);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to get alert instances',
+      };
+    }
+  }
+
   static async acknowledgeAlertSafe(
     eventId: number,
     payload?: AcknowledgeAlertRequest,
@@ -270,6 +335,28 @@ export class MonitoringService extends BaseService {
     }
   }
 
+  static async acknowledgeAlertInstanceSafe(
+    alertId: string,
+    payload?: AcknowledgeAlertRequest,
+  ): Promise<{
+    success: boolean;
+    data?: AlertInstanceActionResult;
+    error?: string;
+  }> {
+    try {
+      const data = await this.acknowledgeAlertInstance(alertId, payload);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to acknowledge alert instance',
+      };
+    }
+  }
+
   static async silenceAlertSafe(
     eventId: number,
     payload: SilenceAlertRequest,
@@ -286,6 +373,28 @@ export class MonitoringService extends BaseService {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to silence alert',
+      };
+    }
+  }
+
+  static async silenceAlertInstanceSafe(
+    alertId: string,
+    payload: SilenceAlertRequest,
+  ): Promise<{
+    success: boolean;
+    data?: AlertInstanceActionResult;
+    error?: string;
+  }> {
+    try {
+      const data = await this.silenceAlertInstance(alertId, payload);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to silence alert instance',
       };
     }
   }

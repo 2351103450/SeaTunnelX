@@ -6,7 +6,13 @@ import {useTranslations} from 'next-intl';
 import {toast} from 'sonner';
 import {RefreshCw} from 'lucide-react';
 import services from '@/lib/services';
-import type {RemoteAlertEvent} from '@/lib/services/monitoring';
+import type {
+  AlertHandlingStatus,
+  AlertInstance,
+  AlertInstanceStats,
+  AlertLifecycleStatus,
+  AlertSourceType,
+} from '@/lib/services/monitoring';
 import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Input} from '@/components/ui/input';
@@ -32,6 +38,14 @@ type ClusterOption = {
   name: string;
 };
 
+const EMPTY_STATS: AlertInstanceStats = {
+  firing: 0,
+  resolved: 0,
+  pending: 0,
+  acknowledged: 0,
+  silenced: 0,
+};
+
 function formatDateTime(value?: string | null): string {
   if (!value) {
     return '-';
@@ -41,13 +55,6 @@ function formatDateTime(value?: string | null): string {
     return value;
   }
   return parsed.toLocaleString();
-}
-
-function formatUnixSeconds(value?: number): string {
-  if (!value || value <= 0) {
-    return '-';
-  }
-  return formatDateTime(new Date(value * 1000).toISOString());
 }
 
 function toRFC3339(value: string): string | undefined {
@@ -61,21 +68,35 @@ function toRFC3339(value: string): string | undefined {
   return parsed.toISOString();
 }
 
-function normalizeStatus(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function resolveBadgeVariant(
-  status: string,
+function resolveSeverityVariant(
+  severity: string,
 ): 'default' | 'secondary' | 'outline' | 'destructive' {
-  const normalized = normalizeStatus(status);
-  if (normalized === 'firing') {
+  const normalized = severity.trim().toLowerCase();
+  if (normalized === 'critical') {
     return 'destructive';
   }
-  if (normalized === 'resolved') {
+  if (normalized === 'warning') {
     return 'secondary';
   }
   return 'outline';
+}
+
+function resolveLifecycleVariant(
+  status: AlertLifecycleStatus,
+): 'default' | 'secondary' | 'outline' | 'destructive' {
+  return status === 'firing' ? 'destructive' : 'secondary';
+}
+
+function resolveHandlingVariant(
+  status: AlertHandlingStatus,
+): 'default' | 'secondary' | 'outline' | 'destructive' {
+  if (status === 'silenced') {
+    return 'outline';
+  }
+  if (status === 'acknowledged') {
+    return 'secondary';
+  }
+  return 'default';
 }
 
 export function MonitoringAlertsCenter() {
@@ -84,15 +105,19 @@ export function MonitoringAlertsCenter() {
 
   const [clusterOptions, setClusterOptions] = useState<ClusterOption[]>([]);
   const [clusterFilter, setClusterFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [lifecycleFilter, setLifecycleFilter] = useState<string>('all');
+  const [handlingFilter, setHandlingFilter] = useState<string>('all');
   const [startTimeFilter, setStartTimeFilter] = useState<string>('');
   const [endTimeFilter, setEndTimeFilter] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<string>('50');
 
-  const [alerts, setAlerts] = useState<RemoteAlertEvent[]>([]);
+  const [alerts, setAlerts] = useState<AlertInstance[]>([]);
+  const [stats, setStats] = useState<AlertInstanceStats>(EMPTY_STATS);
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [actingAlertId, setActingAlertId] = useState<string | null>(null);
 
   const pageSizeNumber = useMemo(
     () => Number.parseInt(pageSize, 10) || 50,
@@ -131,9 +156,20 @@ export function MonitoringAlertsCenter() {
   const loadAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await services.monitoring.getRemoteAlertsSafe({
+      const result = await services.monitoring.getAlertInstancesSafe({
         cluster_id: clusterFilter === 'all' ? undefined : clusterFilter,
-        status: statusFilter === 'all' ? undefined : statusFilter,
+        source_type:
+          sourceFilter === 'all'
+            ? undefined
+            : (sourceFilter as AlertSourceType),
+        lifecycle_status:
+          lifecycleFilter === 'all'
+            ? undefined
+            : (lifecycleFilter as AlertLifecycleStatus),
+        handling_status:
+          handlingFilter === 'all'
+            ? undefined
+            : (handlingFilter as AlertHandlingStatus),
         start_time: toRFC3339(startTimeFilter),
         end_time: toRFC3339(endTimeFilter),
         page,
@@ -143,11 +179,13 @@ export function MonitoringAlertsCenter() {
       if (!result.success || !result.data) {
         toast.error(result.error || t('alerts.loadError'));
         setAlerts([]);
+        setStats(EMPTY_STATS);
         setTotal(0);
         return;
       }
 
       setAlerts(result.data.alerts || []);
+      setStats(result.data.stats || EMPTY_STATS);
       setTotal(result.data.total || 0);
       if (result.data.page && result.data.page !== page) {
         setPage(result.data.page);
@@ -157,7 +195,9 @@ export function MonitoringAlertsCenter() {
     }
   }, [
     clusterFilter,
-    statusFilter,
+    sourceFilter,
+    lifecycleFilter,
+    handlingFilter,
     startTimeFilter,
     endTimeFilter,
     page,
@@ -182,41 +222,52 @@ export function MonitoringAlertsCenter() {
     loadAlerts();
   }, [loadAlerts]);
 
-  const alertStats = useMemo(
-    () =>
-      alerts.reduce(
-        (acc, alert) => {
-          const status = normalizeStatus(alert.status || '');
-          if (status === 'firing') {
-            acc.firing += 1;
-            return acc;
-          }
-          if (status === 'resolved') {
-            acc.resolved += 1;
-            return acc;
-          }
-          acc.others += 1;
-          return acc;
-        },
-        {
-          firing: 0,
-          resolved: 0,
-          others: 0,
-        },
-      ),
-    [alerts],
+  const resolveSourceLabel = useCallback(
+    (sourceType: AlertSourceType) => {
+      if (sourceType === 'local_process_event') {
+        return t('alerts.sourceTypes.local_process_event');
+      }
+      if (sourceType === 'remote_alertmanager') {
+        return t('alerts.sourceTypes.remote_alertmanager');
+      }
+      return sourceType;
+    },
+    [t],
   );
 
-  const resolveStatusLabel = useCallback(
-    (status: string) => {
-      const normalized = normalizeStatus(status);
-      if (normalized === 'firing') {
-        return t('alerts.statusFiring');
+  const resolveLifecycleLabel = useCallback(
+    (status: AlertLifecycleStatus) => {
+      if (status === 'resolved') {
+        return t('alerts.lifecycleStatuses.resolved');
       }
-      if (normalized === 'resolved') {
-        return t('alerts.statusResolved');
+      return t('alerts.lifecycleStatuses.firing');
+    },
+    [t],
+  );
+
+  const resolveHandlingLabel = useCallback(
+    (status: AlertHandlingStatus) => {
+      if (status === 'acknowledged') {
+        return t('alerts.handlingStatuses.acknowledged');
       }
-      return status || '-';
+      if (status === 'silenced') {
+        return t('alerts.handlingStatuses.silenced');
+      }
+      return t('alerts.handlingStatuses.pending');
+    },
+    [t],
+  );
+
+  const resolveSeverityLabel = useCallback(
+    (severity: string) => {
+      const normalized = severity.trim().toLowerCase();
+      if (normalized === 'critical') {
+        return t('alertSeverity.critical');
+      }
+      if (normalized === 'warning') {
+        return t('alertSeverity.warning');
+      }
+      return severity || '-';
     },
     [t],
   );
@@ -227,6 +278,41 @@ export function MonitoringAlertsCenter() {
     }
     return Math.max(1, Math.ceil(total / pageSizeNumber));
   }, [total, pageSizeNumber]);
+
+  const handleAcknowledge = async (alert: AlertInstance) => {
+    setActingAlertId(alert.alert_id);
+    try {
+      const result = await services.monitoring.acknowledgeAlertInstanceSafe(
+        alert.alert_id,
+      );
+      if (!result.success) {
+        toast.error(result.error || t('alerts.ackError'));
+        return;
+      }
+      toast.success(t('alerts.ackSuccess'));
+      await loadAlerts();
+    } finally {
+      setActingAlertId(null);
+    }
+  };
+
+  const handleSilence = async (alert: AlertInstance) => {
+    setActingAlertId(alert.alert_id);
+    try {
+      const result = await services.monitoring.silenceAlertInstanceSafe(
+        alert.alert_id,
+        {duration_minutes: 30},
+      );
+      if (!result.success) {
+        toast.error(result.error || t('alerts.silenceError'));
+        return;
+      }
+      toast.success(t('alerts.silenceSuccess'));
+      await loadAlerts();
+    } finally {
+      setActingAlertId(null);
+    }
+  };
 
   return (
     <div className='space-y-4'>
@@ -261,22 +347,75 @@ export function MonitoringAlertsCenter() {
 
               <div className='w-full md:w-56'>
                 <Select
-                  value={statusFilter}
+                  value={sourceFilter}
                   onValueChange={(value) => {
-                    setStatusFilter(value);
+                    setSourceFilter(value);
                     setPage(1);
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={t('alerts.statusFilter')} />
+                    <SelectValue placeholder={t('alerts.sourceFilter')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='all'>{t('alerts.allStatus')}</SelectItem>
+                    <SelectItem value='all'>{t('alerts.allSources')}</SelectItem>
+                    <SelectItem value='local_process_event'>
+                      {t('alerts.sourceTypes.local_process_event')}
+                    </SelectItem>
+                    <SelectItem value='remote_alertmanager'>
+                      {t('alerts.sourceTypes.remote_alertmanager')}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className='w-full md:w-56'>
+                <Select
+                  value={lifecycleFilter}
+                  onValueChange={(value) => {
+                    setLifecycleFilter(value);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={t('alerts.lifecycleStatusFilter')}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='all'>{t('alerts.allLifecycle')}</SelectItem>
                     <SelectItem value='firing'>
-                      {t('alerts.statusFiring')}
+                      {t('alerts.lifecycleStatuses.firing')}
                     </SelectItem>
                     <SelectItem value='resolved'>
-                      {t('alerts.statusResolved')}
+                      {t('alerts.lifecycleStatuses.resolved')}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className='w-full md:w-56'>
+                <Select
+                  value={handlingFilter}
+                  onValueChange={(value) => {
+                    setHandlingFilter(value);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={t('alerts.handlingStatusFilter')}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='all'>{t('alerts.allHandling')}</SelectItem>
+                    <SelectItem value='pending'>
+                      {t('alerts.handlingStatuses.pending')}
+                    </SelectItem>
+                    <SelectItem value='acknowledged'>
+                      {t('alerts.handlingStatuses.acknowledged')}
+                    </SelectItem>
+                    <SelectItem value='silenced'>
+                      {t('alerts.handlingStatuses.silenced')}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -321,12 +460,12 @@ export function MonitoringAlertsCenter() {
 
             <div className='flex flex-wrap items-center gap-2'>
               <Badge variant='outline'>{`${t('alerts.totalCount')}: ${total}`}</Badge>
-              <Badge variant='destructive'>{`${t('alerts.firingCount')}: ${alertStats.firing}`}</Badge>
-              <Badge variant='secondary'>{`${t('alerts.resolvedCount')}: ${alertStats.resolved}`}</Badge>
-              {alertStats.others > 0 ? (
-                <Badge variant='outline'>{`${t('alerts.otherCount')}: ${alertStats.others}`}</Badge>
-              ) : null}
-              <Button variant='outline' onClick={loadAlerts}>
+              <Badge variant='destructive'>{`${t('alerts.firingCount')}: ${stats.firing}`}</Badge>
+              <Badge variant='secondary'>{`${t('alerts.resolvedCount')}: ${stats.resolved}`}</Badge>
+              <Badge variant='default'>{`${t('alerts.pendingCount')}: ${stats.pending}`}</Badge>
+              <Badge variant='secondary'>{`${t('alerts.acknowledgedCount')}: ${stats.acknowledged}`}</Badge>
+              <Badge variant='outline'>{`${t('alerts.silencedCount')}: ${stats.silenced}`}</Badge>
+              <Button variant='outline' onClick={loadAlerts} disabled={loading}>
                 <RefreshCw className='mr-2 h-4 w-4' />
                 {t('refresh')}
               </Button>
@@ -339,19 +478,22 @@ export function MonitoringAlertsCenter() {
             <TableHeader>
               <TableRow>
                 <TableHead>{t('alerts.cluster')}</TableHead>
+                <TableHead>{t('alerts.sourceType')}</TableHead>
                 <TableHead>{t('alerts.alertName')}</TableHead>
                 <TableHead>{t('alerts.severity')}</TableHead>
-                <TableHead>{t('alerts.status')}</TableHead>
+                <TableHead>{t('alerts.lifecycleStatus')}</TableHead>
+                <TableHead>{t('alerts.handlingStatus')}</TableHead>
                 <TableHead>{t('alerts.summary')}</TableHead>
                 <TableHead>{t('alerts.eventTime')}</TableHead>
-                <TableHead>{t('alerts.lastReceivedAt')}</TableHead>
+                <TableHead>{t('alerts.lastSeenAt')}</TableHead>
+                <TableHead>{t('actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={10}
                     className='text-center text-muted-foreground'
                   >
                     {t('loading')}
@@ -360,37 +502,85 @@ export function MonitoringAlertsCenter() {
               ) : !alerts.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={10}
                     className='text-center text-muted-foreground'
                   >
                     {t('alerts.noAlerts')}
                   </TableCell>
                 </TableRow>
               ) : (
-                alerts.map((alert) => (
-                  <TableRow key={`${alert.id}-${alert.fingerprint}`}>
-                    <TableCell>
-                      {alert.cluster_name || alert.cluster_id || '-'}
-                    </TableCell>
-                    <TableCell>{alert.alert_name || '-'}</TableCell>
-                    <TableCell>{alert.severity || '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant={resolveBadgeVariant(alert.status)}>
-                        {resolveStatusLabel(alert.status || '')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell
-                      className='max-w-[360px] truncate'
-                      title={alert.summary || alert.description || ''}
-                    >
-                      {alert.summary || alert.description || '-'}
-                    </TableCell>
-                    <TableCell>{formatUnixSeconds(alert.starts_at)}</TableCell>
-                    <TableCell>
-                      {formatDateTime(alert.last_received_at)}
-                    </TableCell>
-                  </TableRow>
-                ))
+                alerts.map((alert) => {
+                  const busy = actingAlertId === alert.alert_id;
+                  const canAcknowledge =
+                    alert.lifecycle_status === 'firing' &&
+                    alert.handling_status === 'pending';
+                  const canSilence =
+                    alert.lifecycle_status === 'firing' &&
+                    alert.handling_status !== 'silenced';
+
+                  return (
+                    <TableRow key={alert.alert_id}>
+                      <TableCell>
+                        {alert.cluster_name || alert.cluster_id || '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant='outline'>
+                          {resolveSourceLabel(alert.source_type)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{alert.alert_name || '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant={resolveSeverityVariant(alert.severity)}>
+                          {resolveSeverityLabel(String(alert.severity || ''))}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={resolveLifecycleVariant(
+                            alert.lifecycle_status,
+                          )}
+                        >
+                          {resolveLifecycleLabel(alert.lifecycle_status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={resolveHandlingVariant(alert.handling_status)}
+                        >
+                          {resolveHandlingLabel(alert.handling_status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell
+                        className='max-w-[320px] truncate'
+                        title={alert.summary || alert.description || ''}
+                      >
+                        {alert.summary || alert.description || '-'}
+                      </TableCell>
+                      <TableCell>{formatDateTime(alert.firing_at)}</TableCell>
+                      <TableCell>{formatDateTime(alert.last_seen_at)}</TableCell>
+                      <TableCell>
+                        <div className='flex flex-wrap gap-2'>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={!canAcknowledge || busy}
+                            onClick={() => handleAcknowledge(alert)}
+                          >
+                            {t('alerts.ack')}
+                          </Button>
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            disabled={!canSilence || busy}
+                            onClick={() => handleSilence(alert)}
+                          >
+                            {t('alerts.silence30m')}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

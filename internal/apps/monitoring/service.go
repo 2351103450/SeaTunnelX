@@ -380,24 +380,15 @@ func (s *Service) AcknowledgeAlert(ctx context.Context, eventID uint, operator, 
 		return nil, fmt.Errorf("event is not alertable")
 	}
 
-	state, err := s.repo.GetEventStateByEventID(ctx, eventID)
+	_, state, err := s.persistLocalAlertHandlingState(
+		ctx,
+		event,
+		AlertHandlingStatusAcknowledged,
+		operator,
+		nil,
+		note,
+	)
 	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		state = &AlertEventState{EventID: eventID}
-	}
-
-	now := time.Now().UTC()
-	state.ClusterID = event.ClusterID
-	state.Status = AlertStatusAcknowledged
-	state.AcknowledgedBy = operator
-	state.AcknowledgedAt = &now
-	state.SilencedBy = ""
-	state.SilencedUntil = nil
-	state.Note = note
-
-	if err := s.repo.SaveEventState(ctx, state); err != nil {
 		return nil, err
 	}
 	return toAlertActionResult(state), nil
@@ -427,23 +418,17 @@ func (s *Service) SilenceAlert(ctx context.Context, eventID uint, operator strin
 		return nil, fmt.Errorf("event is not alertable")
 	}
 
-	state, err := s.repo.GetEventStateByEventID(ctx, eventID)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		state = &AlertEventState{EventID: eventID}
-	}
-
 	now := time.Now().UTC()
 	silencedUntil := now.Add(time.Duration(durationMinutes) * time.Minute)
-	state.ClusterID = event.ClusterID
-	state.Status = AlertStatusSilenced
-	state.SilencedBy = operator
-	state.SilencedUntil = &silencedUntil
-	state.Note = note
-
-	if err := s.repo.SaveEventState(ctx, state); err != nil {
+	_, state, err := s.persistLocalAlertHandlingState(
+		ctx,
+		event,
+		AlertHandlingStatusSilenced,
+		operator,
+		&silencedUntil,
+		note,
+	)
+	if err != nil {
 		return nil, err
 	}
 	return toAlertActionResult(state), nil

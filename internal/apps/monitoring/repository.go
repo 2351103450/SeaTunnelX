@@ -213,8 +213,17 @@ func (r *Repository) SaveEventState(ctx context.Context, state *AlertEventState)
 	}
 	return r.db.WithContext(ctx).
 		Where("event_id = ?", state.EventID).
-		Assign(state).
-		FirstOrCreate(state).Error
+		Assign(map[string]interface{}{
+			"cluster_id":      state.ClusterID,
+			"status":          state.Status,
+			"acknowledged_by": state.AcknowledgedBy,
+			"acknowledged_at": state.AcknowledgedAt,
+			"silenced_by":     state.SilencedBy,
+			"silenced_until":  state.SilencedUntil,
+			"note":            state.Note,
+			"updated_at":      time.Now().UTC(),
+		}).
+		FirstOrCreate(&AlertEventState{EventID: state.EventID}).Error
 }
 
 // ListEventStatesByEventIDs returns states mapped by event_id.
