@@ -84,11 +84,7 @@ func (r *Repository) ListCriticalEvents(ctx context.Context, filter *AlertEventQ
 		filter = &AlertEventQueryFilter{}
 	}
 
-	criticalTypes := []monitor.ProcessEventType{
-		monitor.EventTypeCrashed,
-		monitor.EventTypeRestartFailed,
-		monitor.EventTypeRestartLimitReached,
-	}
+	criticalTypes := alertableProcessEventTypes()
 
 	countQuery := r.db.WithContext(ctx).
 		Table("process_events").

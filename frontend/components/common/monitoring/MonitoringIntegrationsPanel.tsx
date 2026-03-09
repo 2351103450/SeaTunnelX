@@ -182,7 +182,7 @@ export function MonitoringIntegrationsPanel() {
   }, [loadChannels, loadClusters, loadRoutes]);
 
   const handleCreateChannel = async () => {
-    if (!channelForm.name.trim() || !channelForm.endpoint.trim()) {
+    if (!channelForm.name.trim() || !(channelForm.endpoint || '').trim()) {
       toast.error(t('phase3.channelFormInvalid'));
       return;
     }
@@ -192,7 +192,7 @@ export function MonitoringIntegrationsPanel() {
       const result = await services.monitoring.createNotificationChannelSafe({
         ...channelForm,
         name: channelForm.name.trim(),
-        endpoint: channelForm.endpoint.trim(),
+        endpoint: (channelForm.endpoint || '').trim(),
       });
       if (!result.success) {
         toast.error(result.error || t('phase3.channelCreateError'));
@@ -234,7 +234,7 @@ export function MonitoringIntegrationsPanel() {
         {
           name: channel.name,
           type: channel.type,
-          endpoint: channel.endpoint,
+          endpoint: channel.endpoint || '',
           secret: channel.secret,
           description: channel.description,
           enabled,
@@ -253,9 +253,8 @@ export function MonitoringIntegrationsPanel() {
   const handleTestChannel = async (channelId: number) => {
     setTestingChannelId(channelId);
     try {
-      const result = await services.monitoring.testNotificationChannelSafe(
-        channelId,
-      );
+      const result =
+        await services.monitoring.testNotificationChannelSafe(channelId);
       if (!result.success || !result.data) {
         toast.error(result.error || t('phase3.channelTestError'));
         return;
@@ -374,8 +373,8 @@ export function MonitoringIntegrationsPanel() {
     }
     if (route.cluster_id) {
       const clusterName =
-        clusterOptions.find((cluster) => cluster.id === route.cluster_id)?.name ||
-        route.cluster_id;
+        clusterOptions.find((cluster) => cluster.id === route.cluster_id)
+          ?.name || route.cluster_id;
       parts.push(clusterName);
     }
     if (route.severity) {
@@ -403,7 +402,10 @@ export function MonitoringIntegrationsPanel() {
               <Input
                 value={channelForm.name}
                 onChange={(event) =>
-                  setChannelForm((prev) => ({...prev, name: event.target.value}))
+                  setChannelForm((prev) => ({
+                    ...prev,
+                    name: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -422,7 +424,9 @@ export function MonitoringIntegrationsPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='webhook'>{typeLabelMap.webhook}</SelectItem>
+                  <SelectItem value='webhook'>
+                    {typeLabelMap.webhook}
+                  </SelectItem>
                   <SelectItem value='email'>{typeLabelMap.email}</SelectItem>
                   <SelectItem value='wecom'>{typeLabelMap.wecom}</SelectItem>
                   <SelectItem value='dingtalk'>
@@ -437,7 +441,7 @@ export function MonitoringIntegrationsPanel() {
           <div className='space-y-2'>
             <Label>{t('phase3.channelEndpoint')}</Label>
             <Input
-              value={channelForm.endpoint}
+              value={channelForm.endpoint || ''}
               onChange={(event) =>
                 setChannelForm((prev) => ({
                   ...prev,
@@ -452,7 +456,10 @@ export function MonitoringIntegrationsPanel() {
             <Input
               value={channelForm.secret || ''}
               onChange={(event) =>
-                setChannelForm((prev) => ({...prev, secret: event.target.value}))
+                setChannelForm((prev) => ({
+                  ...prev,
+                  secret: event.target.value,
+                }))
               }
             />
           </div>
@@ -530,7 +537,7 @@ export function MonitoringIntegrationsPanel() {
                         channel.type}
                     </TableCell>
                     <TableCell className='max-w-[380px] break-all'>
-                      {channel.endpoint}
+                      {channel.endpoint || '-'}
                     </TableCell>
                     <TableCell>
                       <Switch
@@ -618,7 +625,9 @@ export function MonitoringIntegrationsPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>{t('phase3.routeMatchAll')}</SelectItem>
+                  <SelectItem value='all'>
+                    {t('phase3.routeMatchAll')}
+                  </SelectItem>
                   <SelectItem value='local_process_event'>
                     {t('alerts.sourceTypes.local_process_event')}
                   </SelectItem>
@@ -641,7 +650,9 @@ export function MonitoringIntegrationsPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>{t('phase3.routeMatchAll')}</SelectItem>
+                  <SelectItem value='all'>
+                    {t('phase3.routeMatchAll')}
+                  </SelectItem>
                   {clusterOptions.map((cluster) => (
                     <SelectItem key={cluster.id} value={cluster.id}>
                       {cluster.name}
@@ -663,9 +674,15 @@ export function MonitoringIntegrationsPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='all'>{t('phase3.routeMatchAll')}</SelectItem>
-                  <SelectItem value='warning'>{t('alertSeverity.warning')}</SelectItem>
-                  <SelectItem value='critical'>{t('alertSeverity.critical')}</SelectItem>
+                  <SelectItem value='all'>
+                    {t('phase3.routeMatchAll')}
+                  </SelectItem>
+                  <SelectItem value='warning'>
+                    {t('alertSeverity.warning')}
+                  </SelectItem>
+                  <SelectItem value='critical'>
+                    {t('alertSeverity.critical')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>

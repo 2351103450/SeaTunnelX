@@ -76,6 +76,18 @@ const (
 	// EventTypeRestartLimitReached indicates the restart limit has been reached.
 	// EventTypeRestartLimitReached 表示已达到重启次数上限。
 	EventTypeRestartLimitReached ProcessEventType = "restart_limit_reached"
+
+	// EventTypeClusterRestartRequested indicates a manual cluster restart request was issued.
+	// EventTypeClusterRestartRequested 表示触发了一次手动集群重启请求。
+	EventTypeClusterRestartRequested ProcessEventType = "cluster_restart_requested"
+
+	// EventTypeNodeOffline indicates one managed node has remained unavailable beyond the grace window.
+	// EventTypeNodeOffline 表示某个受管节点在宽限窗口后仍处于不可用状态。
+	EventTypeNodeOffline ProcessEventType = "node_offline"
+
+	// EventTypeNodeRecovered indicates one node-offline episode has ended and the node is healthy again.
+	// EventTypeNodeRecovered 表示某个节点离线告警阶段已经结束，节点重新恢复健康。
+	EventTypeNodeRecovered ProcessEventType = "node_recovered"
 )
 
 // ProcessEvent represents a process lifecycle event.
@@ -83,16 +95,16 @@ const (
 // Requirements: 6.1, 6.2 - Process event model
 type ProcessEvent struct {
 	ID          uint             `json:"id" gorm:"primaryKey;autoIncrement"`
-	ClusterID   uint             `json:"cluster_id" gorm:"index"`                  // 关联的集群 ID / Associated cluster ID
-	NodeID      uint             `json:"node_id" gorm:"index"`                     // 关联的节点 ID / Associated node ID
-	HostID      uint             `json:"host_id" gorm:"index"`                     // 关联的主机 ID / Associated host ID
-	EventType   ProcessEventType `json:"event_type" gorm:"size:30;index"`         // 事件类型 / Event type
-	PID         int              `json:"pid"`                                      // 进程 PID / Process PID
-	ProcessName string           `json:"process_name" gorm:"size:100"`             // 进程名称 / Process name
-	InstallDir  string           `json:"install_dir" gorm:"size:255"`              // 安装目录 / Install directory
-	Role        string           `json:"role" gorm:"size:20"`                      // 节点角色 / Node role
-	Details     string           `json:"details" gorm:"type:text"`                 // 事件详情（JSON）/ Event details (JSON)
-	CreatedAt   time.Time        `json:"created_at" gorm:"autoCreateTime;index"`   // 事件时间 / Event time
+	ClusterID   uint             `json:"cluster_id" gorm:"index"`                // 关联的集群 ID / Associated cluster ID
+	NodeID      uint             `json:"node_id" gorm:"index"`                   // 关联的节点 ID / Associated node ID
+	HostID      uint             `json:"host_id" gorm:"index"`                   // 关联的主机 ID / Associated host ID
+	EventType   ProcessEventType `json:"event_type" gorm:"size:30;index"`        // 事件类型 / Event type
+	PID         int              `json:"pid"`                                    // 进程 PID / Process PID
+	ProcessName string           `json:"process_name" gorm:"size:100"`           // 进程名称 / Process name
+	InstallDir  string           `json:"install_dir" gorm:"size:255"`            // 安装目录 / Install directory
+	Role        string           `json:"role" gorm:"size:20"`                    // 节点角色 / Node role
+	Details     string           `json:"details" gorm:"type:text"`               // 事件详情（JSON）/ Event details (JSON)
+	CreatedAt   time.Time        `json:"created_at" gorm:"autoCreateTime;index"` // 事件时间 / Event time
 }
 
 // TableName specifies the table name for ProcessEvent.

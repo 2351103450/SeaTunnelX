@@ -317,6 +317,33 @@ func Serve() {
 			// Monitoring center 监控中心
 			monitoringRepo := monitoringapp.NewRepository(db.DB(context.Background()))
 			monitoringService := monitoringapp.NewService(clusterService, monitorService, monitoringRepo)
+			monitorService.SetOnEventRecorded(monitoringService.DispatchAlertPolicyEvent)
+			monitoringService.StartNodeHealthEvaluator(ctx)
+			clusterHandler.SetOnOperationExecuted(func(ctx context.Context, event *cluster.OperationEvent) error {
+				if event == nil || event.Operation != cluster.OperationRestart {
+					return nil
+				}
+				details := map[string]string{
+					"trigger":  event.Trigger,
+					"operator": event.Operator,
+					"success":  fmt.Sprintf("%t", event.Success),
+					"message":  event.Message,
+				}
+				if strings.TrimSpace(event.ClusterName) != "" {
+					details["cluster_name"] = strings.TrimSpace(event.ClusterName)
+				}
+				detailsJSON, _ := json.Marshal(details)
+				processName := strings.TrimSpace(event.ClusterName)
+				if processName == "" {
+					processName = "cluster restart"
+				}
+				return monitorService.RecordEvent(ctx, &monitor.ProcessEvent{
+					ClusterID:   event.ClusterID,
+					EventType:   monitor.EventTypeClusterRestartRequested,
+					ProcessName: processName,
+					Details:     string(detailsJSON),
+				})
+			})
 			monitoringHandler := monitoringapp.NewHandler(monitoringService)
 
 			// Public remote-observability integration endpoints (no login required).
@@ -333,6 +360,11 @@ func Serve() {
 			{
 				monitoringRouter.GET("/overview", monitoringHandler.GetOverview)
 				monitoringRouter.GET("/clusters/:id/overview", monitoringHandler.GetClusterOverview)
+				monitoringRouter.GET("/alert-policies", monitoringHandler.ListAlertPolicies)
+				monitoringRouter.GET("/alert-policies/:id/executions", monitoringHandler.ListAlertPolicyExecutions)
+				monitoringRouter.POST("/alert-policies", monitoringHandler.CreateAlertPolicy)
+				monitoringRouter.PUT("/alert-policies/:id", monitoringHandler.UpdateAlertPolicy)
+				monitoringRouter.DELETE("/alert-policies/:id", monitoringHandler.DeleteAlertPolicy)
 				monitoringRouter.GET("/alert-instances", monitoringHandler.ListAlertInstances)
 				monitoringRouter.GET("/alerts", monitoringHandler.ListAlerts)
 				monitoringRouter.GET("/remote-alerts", monitoringHandler.ListRemoteAlerts)
@@ -343,6 +375,7 @@ func Serve() {
 				monitoringRouter.GET("/clusters/:id/rules", monitoringHandler.ListClusterRules)
 				monitoringRouter.PUT("/clusters/:id/rules/:ruleId", monitoringHandler.UpdateClusterRule)
 				monitoringRouter.GET("/integration/status", monitoringHandler.GetIntegrationStatus)
+				monitoringRouter.GET("/alert-policies/bootstrap", monitoringHandler.GetAlertPolicyCenterBootstrap)
 				monitoringRouter.GET("/platform-health", monitoringHandler.GetPlatformHealth)
 				monitoringRouter.GET("/notification-channels", monitoringHandler.ListNotificationChannels)
 				monitoringRouter.POST("/notification-channels", monitoringHandler.CreateNotificationChannel)
@@ -818,6 +851,9 @@ func initGRPCServer(ctx context.Context) (*grpcServer.Server, *agent.Manager) {
 	})
 	monitorRepo := monitor.NewRepository(db.DB(ctx))
 	monitorService := monitor.NewService(monitorRepo)
+	monitoringRepo := monitoringapp.NewRepository(db.DB(ctx))
+	monitoringService := monitoringapp.NewService(clusterService, monitorService, monitoringRepo)
+	monitorService.SetOnEventRecorded(monitoringService.DispatchAlertPolicyEvent)
 	grpcServer.SetClusterNodeProvider(&grpcClusterNodeProviderAdapter{
 		clusterService: clusterService,
 		monitorService: monitorService,

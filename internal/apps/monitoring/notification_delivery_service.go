@@ -232,6 +232,9 @@ func sendNotification(ctx context.Context, channel *NotificationChannel, payload
 	if channel == nil {
 		return nil, fmt.Errorf("notification channel not found")
 	}
+	if channel.Type == NotificationChannelTypeEmail {
+		return sendEmailNotification(ctx, channel, payload)
+	}
 	if strings.TrimSpace(channel.Endpoint) == "" {
 		return nil, fmt.Errorf("channel endpoint is empty")
 	}
@@ -327,7 +330,10 @@ func buildRemoteAlertPayload(channel *NotificationChannel, record *RemoteAlertRe
 			},
 		}, nil
 	case NotificationChannelTypeEmail:
-		return nil, fmt.Errorf("email notification is not supported yet")
+		return &emailNotificationPayload{
+			Subject: title,
+			Text:    message,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported channel type")
 	}
@@ -401,6 +407,7 @@ func toNotificationDeliveryDTO(delivery *NotificationDelivery) *NotificationDeli
 		AlertID:            delivery.AlertID,
 		SourceType:         delivery.SourceType,
 		SourceKey:          delivery.SourceKey,
+		PolicyID:           delivery.PolicyID,
 		ClusterID:          delivery.ClusterID,
 		ClusterName:        delivery.ClusterName,
 		AlertName:          delivery.AlertName,

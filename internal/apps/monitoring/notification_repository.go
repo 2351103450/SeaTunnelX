@@ -102,6 +102,9 @@ func (r *Repository) ListNotificationDeliveries(ctx context.Context, filter *Not
 	if filter.ChannelID > 0 {
 		query = query.Where("channel_id = ?", filter.ChannelID)
 	}
+	if filter.PolicyID > 0 {
+		query = query.Where("policy_id = ?", filter.PolicyID)
+	}
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
 	}

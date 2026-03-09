@@ -41,6 +41,39 @@ func (AlertRule) TableName() string {
 	return "monitoring_alert_rules"
 }
 
+// AlertPolicy represents one unified alert policy resource skeleton.
+// AlertPolicy 表示统一告警策略资源骨架。
+type AlertPolicy struct {
+	ID                         uint                       `json:"id" gorm:"primaryKey;autoIncrement"`
+	Name                       string                     `json:"name" gorm:"size:160;not null;index"`
+	Description                string                     `json:"description" gorm:"type:text"`
+	PolicyType                 AlertPolicyBuilderKind     `json:"policy_type" gorm:"size:40;not null;index"`
+	TemplateKey                string                     `json:"template_key" gorm:"size:120;index"`
+	LegacyRuleKey              string                     `json:"legacy_rule_key" gorm:"size:120;index"`
+	ClusterID                  string                     `json:"cluster_id" gorm:"size:64;index"`
+	Severity                   AlertSeverity              `json:"severity" gorm:"size:20;default:warning"`
+	Enabled                    bool                       `json:"enabled" gorm:"default:true"`
+	CooldownMinutes            int                        `json:"cooldown_minutes" gorm:"default:0"`
+	SendRecovery               bool                       `json:"send_recovery" gorm:"default:true"`
+	PromQL                     string                     `json:"promql" gorm:"type:text"`
+	ConditionsJSON             string                     `json:"conditions_json" gorm:"type:text"`
+	NotificationChannelIDsJSON string                     `json:"notification_channel_ids_json" gorm:"type:text"`
+	MatchCount                 int                        `json:"match_count" gorm:"default:0"`
+	DeliveryCount              int                        `json:"delivery_count" gorm:"default:0"`
+	LastMatchedAt              *time.Time                 `json:"last_matched_at"`
+	LastDeliveredAt            *time.Time                 `json:"last_delivered_at"`
+	LastExecutionStatus        AlertPolicyExecutionStatus `json:"last_execution_status" gorm:"size:20;default:idle"`
+	LastExecutionError         string                     `json:"last_execution_error" gorm:"type:text"`
+	CreatedAt                  time.Time                  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt                  time.Time                  `json:"updated_at" gorm:"autoUpdateTime"`
+}
+
+// TableName specifies the table name for AlertPolicy.
+// TableName 指定 AlertPolicy 表名。
+func (AlertPolicy) TableName() string {
+	return "monitoring_alert_policies"
+}
+
 // AlertEventState records manual state operations for one process event.
 // AlertEventState 记录针对单条进程事件的人工操作状态。
 type AlertEventState struct {
@@ -117,6 +150,7 @@ type NotificationChannel struct {
 	Enabled     bool                    `json:"enabled"`
 	Endpoint    string                  `json:"endpoint" gorm:"size:500"`
 	Secret      string                  `json:"secret" gorm:"size:500"`
+	ConfigJSON  string                  `json:"config_json" gorm:"type:text"`
 	Description string                  `json:"description" gorm:"type:text"`
 	CreatedAt   time.Time               `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt   time.Time               `json:"updated_at" gorm:"autoUpdateTime"`
@@ -159,6 +193,7 @@ type NotificationDelivery struct {
 	AlertID             string     `json:"alert_id" gorm:"size:255;index"`
 	SourceType          string     `json:"source_type" gorm:"size:40;index"`
 	SourceKey           string     `json:"source_key" gorm:"size:255;index;uniqueIndex:ux_monitoring_delivery_source_channel_event,priority:1"`
+	PolicyID            uint       `json:"policy_id" gorm:"index"`
 	ClusterID           string     `json:"cluster_id" gorm:"size:64;index"`
 	ClusterName         string     `json:"cluster_name" gorm:"size:255;index"`
 	AlertName           string     `json:"alert_name" gorm:"size:255;index"`

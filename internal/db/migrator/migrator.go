@@ -80,6 +80,7 @@ func Migrate() {
 		&monitor.MonitorConfig{},              // 监控配置表 / Monitor config table (Requirements: 5.2)
 		&monitor.ProcessEvent{},               // 进程事件表 / Process event table (Requirements: 6.1)
 		&monitoringapp.AlertRule{},            // 监控告警规则表 / Monitoring alert rule table
+		&monitoringapp.AlertPolicy{},          // 统一告警策略表 / Unified alert policy table
 		&monitoringapp.AlertEventState{},      // 告警事件状态表 / Alert event state table
 		&monitoringapp.AlertState{},           // 统一告警状态表 / Unified alert state table
 		&monitoringapp.NotificationChannel{},  // 通知渠道表 / Notification channel table

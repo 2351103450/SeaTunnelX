@@ -173,7 +173,7 @@ func (s *Service) AcknowledgeAlertInstance(ctx context.Context, alertID, operato
 		if err != nil {
 			return nil, err
 		}
-		if !isCriticalEventType(event.EventType) {
+		if !isAlertableEventType(event.EventType) {
 			return nil, fmt.Errorf("event is not alertable")
 		}
 		state, _, err := s.persistLocalAlertHandlingState(
@@ -244,7 +244,7 @@ func (s *Service) SilenceAlertInstance(ctx context.Context, alertID, operator st
 		if err != nil {
 			return nil, err
 		}
-		if !isCriticalEventType(event.EventType) {
+		if !isAlertableEventType(event.EventType) {
 			return nil, fmt.Errorf("event is not alertable")
 		}
 		state, _, err := s.persistLocalAlertHandlingState(
@@ -345,18 +345,29 @@ func (s *Service) buildLocalAlertInstances(ctx context.Context, filter *AlertIns
 		if filter.Severity != "" && !strings.EqualFold(string(rule.Severity), string(filter.Severity)) {
 			continue
 		}
-		if filter.LifecycleStatus == AlertLifecycleStatusResolved {
-			continue
-		}
 
 		sourceKey := buildLocalAlertSourceKey(row.ID)
 		state := stateMap[sourceKey]
 		if state == nil {
 			state = alertStateFromLegacyState(sourceKey, legacyStateMap[row.ID])
 		}
+
+		lifecycleStatus, resolvedAt, err := s.resolveLocalAlertLifecycle(ctx, row)
+		if err != nil {
+			return nil, err
+		}
+		if filter.LifecycleStatus != "" && lifecycleStatus != filter.LifecycleStatus {
+			continue
+		}
+
 		handlingStatus := resolveAlertHandlingStatus(state, now)
 		if filter.HandlingStatus != "" && handlingStatus != filter.HandlingStatus {
 			continue
+		}
+
+		lastSeenAt := row.CreatedAt.UTC()
+		if resolvedAt != nil {
+			lastSeenAt = resolvedAt.UTC()
 		}
 
 		item := &AlertInstance{
@@ -369,11 +380,12 @@ func (s *Service) buildLocalAlertInstances(ctx context.Context, filter *AlertIns
 			RuleKey:         strings.TrimSpace(rule.RuleKey),
 			Summary:         buildLocalAlertSummary(row, rule),
 			Description:     strings.TrimSpace(row.Details),
-			LifecycleStatus: AlertLifecycleStatusFiring,
+			LifecycleStatus: lifecycleStatus,
 			HandlingStatus:  handlingStatus,
 			CreatedAt:       row.CreatedAt.UTC(),
 			FiringAt:        row.CreatedAt.UTC(),
-			LastSeenAt:      row.CreatedAt.UTC(),
+			LastSeenAt:      lastSeenAt,
+			ResolvedAt:      resolvedAt,
 			SourceRef: &AlertInstanceSourceRef{
 				EventID:     row.ID,
 				EventType:   string(row.EventType),
@@ -386,6 +398,28 @@ func (s *Service) buildLocalAlertInstances(ctx context.Context, filter *AlertIns
 	}
 
 	return items, nil
+}
+
+func (s *Service) resolveLocalAlertLifecycle(ctx context.Context, row *AlertEventSource) (AlertLifecycleStatus, *time.Time, error) {
+	if row == nil {
+		return AlertLifecycleStatusFiring, nil, nil
+	}
+	if row.EventType != monitor.EventTypeNodeOffline || s.monitorService == nil {
+		return AlertLifecycleStatusFiring, nil, nil
+	}
+
+	recovered, recoveryEvent, err := s.monitorService.HasNodeEventAfter(ctx, row.NodeID, row.CreatedAt, []monitor.ProcessEventType{
+		monitor.EventTypeNodeRecovered,
+	})
+	if err != nil {
+		return AlertLifecycleStatusFiring, nil, err
+	}
+	if !recovered || recoveryEvent == nil {
+		return AlertLifecycleStatusFiring, nil, nil
+	}
+
+	resolvedAt := recoveryEvent.CreatedAt.UTC()
+	return AlertLifecycleStatusResolved, &resolvedAt, nil
 }
 
 func (s *Service) buildRemoteAlertInstances(ctx context.Context, filter *AlertInstanceFilter, now time.Time) ([]*AlertInstance, error) {
@@ -678,6 +712,32 @@ func buildLocalAlertSummary(row *AlertEventSource, rule *AlertRule) string {
 	base := ""
 	if rule != nil {
 		base = strings.TrimSpace(rule.RuleName)
+	}
+	if row.EventType == monitor.EventTypeClusterRestartRequested {
+		switch {
+		case base != "" && strings.TrimSpace(row.ClusterName) != "":
+			return fmt.Sprintf("%s · %s", base, strings.TrimSpace(row.ClusterName))
+		case base != "":
+			return base
+		case strings.TrimSpace(row.ClusterName) != "":
+			return fmt.Sprintf("集群重启 · %s", strings.TrimSpace(row.ClusterName))
+		default:
+			return "集群重启事件"
+		}
+	}
+	if row.EventType == monitor.EventTypeNodeOffline {
+		switch {
+		case base != "" && strings.TrimSpace(row.Hostname) != "":
+			return fmt.Sprintf("%s · %s", base, strings.TrimSpace(row.Hostname))
+		case base != "" && strings.TrimSpace(row.ProcessName) != "":
+			return fmt.Sprintf("%s · %s", base, strings.TrimSpace(row.ProcessName))
+		case base != "":
+			return base
+		case strings.TrimSpace(row.Hostname) != "":
+			return fmt.Sprintf("节点离线 · %s", strings.TrimSpace(row.Hostname))
+		default:
+			return "节点离线"
+		}
 	}
 	processName := strings.TrimSpace(row.ProcessName)
 	hostname := strings.TrimSpace(row.Hostname)

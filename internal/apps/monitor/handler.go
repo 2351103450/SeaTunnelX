@@ -172,9 +172,9 @@ func (h *Handler) ListProcessEvents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"events": events,
-		"total":  total,
-		"page":   filter.Page,
+		"events":    events,
+		"total":     total,
+		"page":      filter.Page,
 		"page_size": filter.PageSize,
 	})
 }

@@ -25,6 +25,9 @@ import {BaseService} from '../core/base.service';
 import type {
   AcknowledgeAlertRequest,
   AlertActionResult,
+  AlertPolicy,
+  AlertPolicyCenterBootstrapData,
+  AlertPolicyListData,
   AlertFilterParams,
   AlertInstanceActionResult,
   AlertInstanceFilterParams,
@@ -47,10 +50,75 @@ import type {
   RemoteAlertFilterParams,
   RemoteAlertListData,
   SilenceAlertRequest,
+  UpsertAlertPolicyRequest,
   UpsertNotificationChannelRequest,
   UpsertNotificationRouteRequest,
   UpdateAlertRuleRequest,
 } from './types';
+
+function normalizeAlertPolicy(policy: AlertPolicy): AlertPolicy {
+  return {
+    ...policy,
+    conditions: Array.isArray(policy.conditions) ? policy.conditions : [],
+    notification_channel_ids: Array.isArray(policy.notification_channel_ids)
+      ? policy.notification_channel_ids
+      : [],
+    match_count: Number.isFinite(policy.match_count) ? policy.match_count : 0,
+    delivery_count: Number.isFinite(policy.delivery_count)
+      ? policy.delivery_count
+      : 0,
+    last_execution_status: policy.last_execution_status || 'idle',
+    last_execution_error: policy.last_execution_error || '',
+  };
+}
+
+function normalizeAlertPolicyListData(
+  data: AlertPolicyListData,
+): AlertPolicyListData {
+  return {
+    ...data,
+    policies: Array.isArray(data.policies)
+      ? data.policies.map(normalizeAlertPolicy)
+      : [],
+  };
+}
+
+function normalizeAlertPolicyCenterBootstrapData(
+  data: AlertPolicyCenterBootstrapData,
+): AlertPolicyCenterBootstrapData {
+  return {
+    ...data,
+    capabilities: Array.isArray(data.capabilities) ? data.capabilities : [],
+    builders: Array.isArray(data.builders) ? data.builders : [],
+    templates: Array.isArray(data.templates) ? data.templates : [],
+    components: Array.isArray(data.components) ? data.components : [],
+  };
+}
+
+function normalizeNotificationChannelListData(
+  data: NotificationChannelListData,
+): NotificationChannelListData {
+  return {
+    ...data,
+    channels: Array.isArray(data.channels)
+      ? data.channels.map((channel) => ({
+          ...channel,
+          config:
+            channel?.config && channel.config.email
+              ? {
+                  ...channel.config,
+                  email: {
+                    ...channel.config.email,
+                    recipients: Array.isArray(channel.config.email.recipients)
+                      ? channel.config.email.recipients
+                      : [],
+                  },
+                }
+              : channel?.config || null,
+        }))
+      : [],
+  };
+}
 
 export class MonitoringService extends BaseService {
   protected static readonly basePath = '/monitoring';
@@ -184,6 +252,71 @@ export class MonitoringService extends BaseService {
   }
 
   /**
+   * Get unified alert policy center bootstrap payload.
+   * 获取统一告警策略中心初始化数据。
+   */
+  static async getAlertPolicyCenterBootstrap(): Promise<AlertPolicyCenterBootstrapData> {
+    const data = await this.get<AlertPolicyCenterBootstrapData>(
+      '/alert-policies/bootstrap',
+    );
+    return normalizeAlertPolicyCenterBootstrapData(data);
+  }
+
+  /**
+   * List unified alert policy resources.
+   * 获取统一告警策略资源列表。
+   */
+  static async listAlertPolicies(): Promise<AlertPolicyListData> {
+    const data = await this.get<AlertPolicyListData>('/alert-policies');
+    return normalizeAlertPolicyListData(data);
+  }
+
+  /**
+   * List execution history for one unified alert policy.
+   * 获取单条统一告警策略的执行历史。
+   */
+  static async listAlertPolicyExecutions(
+    id: number,
+    params?: NotificationDeliveryFilterParams,
+  ): Promise<NotificationDeliveryListData> {
+    return this.get<NotificationDeliveryListData>(
+      `/alert-policies/${id}/executions`,
+      params as Record<string, unknown> | undefined,
+    );
+  }
+
+  /**
+   * Create unified alert policy resource.
+   * 创建统一告警策略资源。
+   */
+  static async createAlertPolicy(
+    payload: UpsertAlertPolicyRequest,
+  ): Promise<AlertPolicy> {
+    const data = await this.post<AlertPolicy>('/alert-policies', payload);
+    return normalizeAlertPolicy(data);
+  }
+
+  /**
+   * Update unified alert policy resource.
+   * 更新统一告警策略资源。
+   */
+  static async updateAlertPolicy(
+    id: number,
+    payload: UpsertAlertPolicyRequest,
+  ): Promise<AlertPolicy> {
+    const data = await this.put<AlertPolicy>(`/alert-policies/${id}`, payload);
+    return normalizeAlertPolicy(data);
+  }
+
+  /**
+   * Delete unified alert policy resource.
+   * 删除统一告警策略资源。
+   */
+  static async deleteAlertPolicy(id: number): Promise<{id: number}> {
+    return this.delete<{id: number}>(`/alert-policies/${id}`);
+  }
+
+  /**
    * List remote alerts ingested from Alertmanager webhook.
    * 查询 Alertmanager webhook 入库后的远程告警。
    */
@@ -224,7 +357,10 @@ export class MonitoringService extends BaseService {
    * 获取通知渠道列表。
    */
   static async listNotificationChannels(): Promise<NotificationChannelListData> {
-    return this.get<NotificationChannelListData>('/notification-channels');
+    const data = await this.get<NotificationChannelListData>(
+      '/notification-channels',
+    );
+    return normalizeNotificationChannelListData(data);
   }
 
   /**
@@ -542,6 +678,128 @@ export class MonitoringService extends BaseService {
           error instanceof Error
             ? error.message
             : 'Failed to get integration status',
+      };
+    }
+  }
+
+  static async getAlertPolicyCenterBootstrapSafe(): Promise<{
+    success: boolean;
+    data?: AlertPolicyCenterBootstrapData;
+    error?: string;
+  }> {
+    try {
+      const data = await this.getAlertPolicyCenterBootstrap();
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to get alert policy center bootstrap',
+      };
+    }
+  }
+
+  static async listAlertPoliciesSafe(): Promise<{
+    success: boolean;
+    data?: AlertPolicyListData;
+    error?: string;
+  }> {
+    try {
+      const data = await this.listAlertPolicies();
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to list alert policies',
+      };
+    }
+  }
+
+  static async createAlertPolicySafe(
+    payload: UpsertAlertPolicyRequest,
+  ): Promise<{
+    success: boolean;
+    data?: AlertPolicy;
+    error?: string;
+  }> {
+    try {
+      const data = await this.createAlertPolicy(payload);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to create alert policy',
+      };
+    }
+  }
+
+  static async updateAlertPolicySafe(
+    id: number,
+    payload: UpsertAlertPolicyRequest,
+  ): Promise<{
+    success: boolean;
+    data?: AlertPolicy;
+    error?: string;
+  }> {
+    try {
+      const data = await this.updateAlertPolicy(id, payload);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to update alert policy',
+      };
+    }
+  }
+
+  static async deleteAlertPolicySafe(id: number): Promise<{
+    success: boolean;
+    data?: {id: number};
+    error?: string;
+  }> {
+    try {
+      const data = await this.deleteAlertPolicy(id);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to delete alert policy',
+      };
+    }
+  }
+
+  static async listAlertPolicyExecutionsSafe(
+    id: number,
+    params?: NotificationDeliveryFilterParams,
+  ): Promise<{
+    success: boolean;
+    data?: NotificationDeliveryListData;
+    error?: string;
+  }> {
+    try {
+      const data = await this.listAlertPolicyExecutions(id, params);
+      return {success: true, data};
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to load alert policy executions',
       };
     }
   }

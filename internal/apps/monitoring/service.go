@@ -19,9 +19,11 @@ package monitoring
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"sort"
@@ -35,21 +37,30 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	defaultNodeHealthEvaluationInterval = 5 * time.Second
+	minNodeRuntimeOfflineGraceWindow    = 20 * time.Second
+)
+
 // Service provides monitoring center data for UI.
 // Service 为 UI 提供监控中心数据。
 type Service struct {
 	clusterService *cluster.Service
 	monitorService *monitor.Service
 	repo           *Repository
+
+	nodeHealthEvaluatorStartedAt time.Time
+	nodeHealthStartupSuppression time.Duration
 }
 
 // NewService creates a monitoring service.
 // NewService 创建监控中心服务。
 func NewService(clusterService *cluster.Service, monitorService *monitor.Service, repo *Repository) *Service {
 	return &Service{
-		clusterService: clusterService,
-		monitorService: monitorService,
-		repo:           repo,
+		clusterService:               clusterService,
+		monitorService:               monitorService,
+		repo:                         repo,
+		nodeHealthStartupSuppression: defaultNodeHealthStartupSuppressionWindow(),
 	}
 }
 
@@ -376,7 +387,7 @@ func (s *Service) AcknowledgeAlert(ctx context.Context, eventID uint, operator, 
 	if err != nil {
 		return nil, err
 	}
-	if !isCriticalEventType(event.EventType) {
+	if !isAlertableEventType(event.EventType) {
 		return nil, fmt.Errorf("event is not alertable")
 	}
 
@@ -414,7 +425,7 @@ func (s *Service) SilenceAlert(ctx context.Context, eventID uint, operator strin
 	if err != nil {
 		return nil, err
 	}
-	if !isCriticalEventType(event.EventType) {
+	if !isAlertableEventType(event.EventType) {
 		return nil, fmt.Errorf("event is not alertable")
 	}
 
@@ -809,9 +820,20 @@ func (s *Service) CreateNotificationChannel(ctx context.Context, req *UpsertNoti
 		Name:        strings.TrimSpace(req.Name),
 		Type:        req.Type,
 		Enabled:     enabled,
-		Endpoint:    strings.TrimSpace(req.Endpoint),
-		Secret:      strings.TrimSpace(req.Secret),
 		Description: strings.TrimSpace(req.Description),
+	}
+	if channel.Type == NotificationChannelTypeEmail {
+		configJSON, err := marshalNotificationChannelConfig(channel.Type, req.Config)
+		if err != nil {
+			return nil, err
+		}
+		channel.ConfigJSON = configJSON
+		channel.Endpoint = deriveNotificationChannelEndpoint(channel.Type, req.Endpoint, req.Config)
+		channel.Secret = ""
+	} else {
+		channel.Endpoint = strings.TrimSpace(req.Endpoint)
+		channel.Secret = strings.TrimSpace(req.Secret)
+		channel.ConfigJSON = ""
 	}
 
 	if err := s.repo.CreateNotificationChannel(ctx, channel); err != nil {
@@ -840,9 +862,20 @@ func (s *Service) UpdateNotificationChannel(ctx context.Context, id uint, req *U
 
 	channel.Name = strings.TrimSpace(req.Name)
 	channel.Type = req.Type
-	channel.Endpoint = strings.TrimSpace(req.Endpoint)
-	channel.Secret = strings.TrimSpace(req.Secret)
 	channel.Description = strings.TrimSpace(req.Description)
+	if channel.Type == NotificationChannelTypeEmail {
+		configJSON, err := marshalNotificationChannelConfig(channel.Type, req.Config)
+		if err != nil {
+			return nil, err
+		}
+		channel.ConfigJSON = configJSON
+		channel.Endpoint = deriveNotificationChannelEndpoint(channel.Type, req.Endpoint, req.Config)
+		channel.Secret = ""
+	} else {
+		channel.Endpoint = strings.TrimSpace(req.Endpoint)
+		channel.Secret = strings.TrimSpace(req.Secret)
+		channel.ConfigJSON = ""
+	}
 	if req.Enabled != nil {
 		channel.Enabled = *req.Enabled
 	}
@@ -865,6 +898,312 @@ func (s *Service) DeleteNotificationChannel(ctx context.Context, id uint) error 
 	return s.repo.DeleteNotificationChannel(ctx, id)
 }
 
+// StartNodeHealthEvaluator starts a background loop that converts sustained node-unavailable
+// states into local alertable events.
+// StartNodeHealthEvaluator 启动后台循环，将持续性的节点不可用状态转换为本地可告警事件。
+func (s *Service) StartNodeHealthEvaluator(ctx context.Context) {
+	if s == nil || s.clusterService == nil || s.monitorService == nil {
+		return
+	}
+	s.nodeHealthEvaluatorStartedAt = timeNowUTC()
+	if s.nodeHealthStartupSuppression <= 0 {
+		s.nodeHealthStartupSuppression = defaultNodeHealthStartupSuppressionWindow()
+	}
+
+	go func() {
+		ticker := time.NewTicker(defaultNodeHealthEvaluationInterval)
+		defer ticker.Stop()
+
+		for {
+			if err := s.EvaluateNodeHealthAlerts(ctx); err != nil {
+				log.Printf("[Monitoring] evaluate node health alerts failed: %v / 评估节点健康告警失败: %v", err, err)
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+}
+
+// EvaluateNodeHealthAlerts scans managed clusters and emits node_offline / node_recovered
+// events when one node crosses the sustained-health boundary.
+// EvaluateNodeHealthAlerts 扫描受管集群，并在节点跨越持续状态边界时发出 node_offline / node_recovered 事件。
+func (s *Service) EvaluateNodeHealthAlerts(ctx context.Context) error {
+	if s == nil || s.clusterService == nil || s.monitorService == nil {
+		return nil
+	}
+
+	clusters, _, err := s.clusterService.List(ctx, &cluster.ClusterFilter{Page: 1, PageSize: 1000})
+	if err != nil {
+		return err
+	}
+
+	now := timeNowUTC()
+	var evalErrs []error
+	for _, item := range clusters {
+		if item == nil {
+			continue
+		}
+
+		cfg, err := s.monitorService.GetOrCreateConfig(ctx, item.ID)
+		if err != nil {
+			evalErrs = append(evalErrs, err)
+			continue
+		}
+		if cfg == nil || !cfg.AutoMonitor {
+			continue
+		}
+
+		nodes, err := s.clusterService.GetNodes(ctx, item.ID)
+		if err != nil {
+			evalErrs = append(evalErrs, err)
+			continue
+		}
+
+		for _, node := range nodes {
+			if node == nil || shouldSkipNodeOfflineEvaluation(node) {
+				continue
+			}
+
+			offline, matured, reason, observedSince, graceWindow := evaluateNodeOfflineState(node, cfg, now)
+			switch {
+			case offline && matured:
+				if s.shouldSuppressNodeOfflineDuringStartup(now, reason) {
+					continue
+				}
+				if err := s.recordNodeOfflineEpisode(ctx, item.ID, node, reason, observedSince, graceWindow); err != nil {
+					evalErrs = append(evalErrs, err)
+				}
+			case !offline:
+				if err := s.recordNodeRecoveredEpisode(ctx, item.ID, node, now); err != nil {
+					evalErrs = append(evalErrs, err)
+				}
+			}
+		}
+	}
+
+	return errors.Join(evalErrs...)
+}
+
+func (s *Service) shouldSuppressNodeOfflineDuringStartup(now time.Time, reason string) bool {
+	if s == nil || s.nodeHealthEvaluatorStartedAt.IsZero() || s.nodeHealthStartupSuppression <= 0 {
+		return false
+	}
+	if strings.TrimSpace(reason) != "host_offline" {
+		return false
+	}
+	return now.Before(s.nodeHealthEvaluatorStartedAt.UTC().Add(s.nodeHealthStartupSuppression))
+}
+
+func defaultNodeHealthStartupSuppressionWindow() time.Duration {
+	window := time.Duration(config.Config.GRPC.HeartbeatTimeout) * time.Second
+	if window <= 0 {
+		window = 30 * time.Second
+	}
+	return window
+}
+
+func shouldSkipNodeOfflineEvaluation(node *cluster.NodeInfo) bool {
+	if node == nil {
+		return true
+	}
+	switch node.Status {
+	case cluster.NodeStatusPending, cluster.NodeStatusInstalling:
+		return true
+	default:
+		return false
+	}
+}
+
+func evaluateNodeOfflineState(
+	node *cluster.NodeInfo,
+	cfg *monitor.MonitorConfig,
+	now time.Time,
+) (offline bool, matured bool, reason string, observedSince time.Time, graceWindow time.Duration) {
+	if node == nil {
+		return false, false, "", time.Time{}, 0
+	}
+
+	if !node.IsOnline {
+		return true, true, "host_offline", now, 0
+	}
+
+	graceWindow = nodeRuntimeOfflineGrace(cfg)
+	switch {
+	case node.Status == cluster.NodeStatusOffline:
+		observedSince = node.UpdatedAt.UTC()
+		return true, !now.Before(observedSince.Add(graceWindow)), "host_visibility_lost", observedSince, graceWindow
+	case node.Status == cluster.NodeStatusError:
+		observedSince = node.UpdatedAt.UTC()
+		return true, !now.Before(observedSince.Add(graceWindow)), "node_error", observedSince, graceWindow
+	case node.Status == cluster.NodeStatusStopped:
+		observedSince = node.UpdatedAt.UTC()
+		return true, !now.Before(observedSince.Add(graceWindow)), "process_stopped", observedSince, graceWindow
+	case node.ProcessPID <= 0:
+		observedSince = node.UpdatedAt.UTC()
+		return true, !now.Before(observedSince.Add(graceWindow)), "process_missing", observedSince, graceWindow
+	default:
+		return false, false, "", time.Time{}, 0
+	}
+}
+
+func nodeRuntimeOfflineGrace(cfg *monitor.MonitorConfig) time.Duration {
+	if cfg == nil {
+		return minNodeRuntimeOfflineGraceWindow
+	}
+
+	intervalSeconds := cfg.MonitorInterval
+	if intervalSeconds <= 0 {
+		intervalSeconds = 5
+	}
+
+	restartDelaySeconds := cfg.RestartDelay
+	if restartDelaySeconds <= 0 {
+		restartDelaySeconds = 10
+	}
+
+	grace := time.Duration(intervalSeconds*2) * time.Second
+	if cfg.AutoRestart {
+		grace = time.Duration(restartDelaySeconds+intervalSeconds*2) * time.Second
+	}
+	if grace < minNodeRuntimeOfflineGraceWindow {
+		grace = minNodeRuntimeOfflineGraceWindow
+	}
+	return grace
+}
+
+func (s *Service) recordNodeOfflineEpisode(
+	ctx context.Context,
+	clusterID uint,
+	node *cluster.NodeInfo,
+	reason string,
+	observedSince time.Time,
+	graceWindow time.Duration,
+) error {
+	if node == nil {
+		return nil
+	}
+
+	active, err := s.isNodeOfflineEpisodeActive(ctx, node.ID)
+	if err != nil {
+		return err
+	}
+	if active {
+		return nil
+	}
+
+	details, err := json.Marshal(map[string]string{
+		"reason":          strings.TrimSpace(reason),
+		"host_name":       strings.TrimSpace(node.HostName),
+		"host_ip":         strings.TrimSpace(node.HostIP),
+		"node_status":     string(node.Status),
+		"is_online":       fmt.Sprintf("%t", node.IsOnline),
+		"process_pid":     strconv.Itoa(node.ProcessPID),
+		"observed_since":  observedSince.UTC().Format(time.RFC3339),
+		"grace_seconds":   strconv.FormatInt(int64(graceWindow/time.Second), 10),
+		"evaluation_mode": "sustained_node_health",
+	})
+	if err != nil {
+		return err
+	}
+
+	return s.monitorService.RecordEvent(ctx, &monitor.ProcessEvent{
+		ClusterID:   clusterID,
+		NodeID:      node.ID,
+		HostID:      node.HostID,
+		EventType:   monitor.EventTypeNodeOffline,
+		PID:         node.ProcessPID,
+		ProcessName: monitoringProcessNameForRole(string(node.Role)),
+		InstallDir:  node.InstallDir,
+		Role:        string(node.Role),
+		Details:     string(details),
+	})
+}
+
+func (s *Service) recordNodeRecoveredEpisode(ctx context.Context, clusterID uint, node *cluster.NodeInfo, recoveredAt time.Time) error {
+	if node == nil {
+		return nil
+	}
+
+	active, err := s.isNodeOfflineEpisodeActive(ctx, node.ID)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return nil
+	}
+
+	var offlineEventID uint
+	if s.monitorService != nil {
+		offlineEvent, err := s.monitorService.GetLatestNodeEventByTypes(ctx, node.ID, []monitor.ProcessEventType{
+			monitor.EventTypeNodeOffline,
+		})
+		if err != nil {
+			return err
+		}
+		if offlineEvent != nil && !offlineEvent.CreatedAt.After(recoveredAt) {
+			offlineEventID = offlineEvent.ID
+		}
+	}
+
+	detailMap := map[string]string{
+		"host_name":       strings.TrimSpace(node.HostName),
+		"host_ip":         strings.TrimSpace(node.HostIP),
+		"node_status":     string(node.Status),
+		"is_online":       fmt.Sprintf("%t", node.IsOnline),
+		"process_pid":     strconv.Itoa(node.ProcessPID),
+		"recovered_at":    recoveredAt.UTC().Format(time.RFC3339),
+		"evaluation_mode": "sustained_node_health",
+	}
+	if offlineEventID > 0 {
+		detailMap["offline_event_id"] = strconv.FormatUint(uint64(offlineEventID), 10)
+	}
+
+	details, err := json.Marshal(detailMap)
+	if err != nil {
+		return err
+	}
+
+	return s.monitorService.RecordEvent(ctx, &monitor.ProcessEvent{
+		ClusterID:   clusterID,
+		NodeID:      node.ID,
+		HostID:      node.HostID,
+		EventType:   monitor.EventTypeNodeRecovered,
+		PID:         node.ProcessPID,
+		ProcessName: monitoringProcessNameForRole(string(node.Role)),
+		InstallDir:  node.InstallDir,
+		Role:        string(node.Role),
+		Details:     string(details),
+	})
+}
+
+func (s *Service) isNodeOfflineEpisodeActive(ctx context.Context, nodeID uint) (bool, error) {
+	lastMarker, err := s.monitorService.GetLatestNodeEventByTypes(ctx, nodeID, []monitor.ProcessEventType{
+		monitor.EventTypeNodeOffline,
+		monitor.EventTypeNodeRecovered,
+	})
+	if err != nil {
+		return false, err
+	}
+	if lastMarker == nil {
+		return false, nil
+	}
+	return lastMarker.EventType == monitor.EventTypeNodeOffline, nil
+}
+
+func monitoringProcessNameForRole(role string) string {
+	processName := "seatunnel"
+	switch strings.TrimSpace(role) {
+	case "", "hybrid", "master/worker":
+		return processName
+	default:
+		return processName + "-" + strings.TrimSpace(role)
+	}
+}
+
 func toEventStats(m map[monitor.ProcessEventType]int64) *EventStats {
 	if m == nil {
 		m = map[monitor.ProcessEventType]int64{}
@@ -876,6 +1215,8 @@ func toEventStats(m map[monitor.ProcessEventType]int64) *EventStats {
 		Restarted:           m[monitor.EventTypeRestarted],
 		RestartFailed:       m[monitor.EventTypeRestartFailed],
 		RestartLimitReached: m[monitor.EventTypeRestartLimitReached],
+		NodeOffline:         m[monitor.EventTypeNodeOffline],
+		NodeRecovered:       m[monitor.EventTypeNodeRecovered],
 	}
 }
 
@@ -889,15 +1230,27 @@ func mergeEventStats(dst, src *EventStats) {
 	dst.Restarted += src.Restarted
 	dst.RestartFailed += src.RestartFailed
 	dst.RestartLimitReached += src.RestartLimitReached
+	dst.NodeOffline += src.NodeOffline
+	dst.NodeRecovered += src.NodeRecovered
 }
 
-func isCriticalEventType(eventType monitor.ProcessEventType) bool {
-	switch eventType {
-	case monitor.EventTypeCrashed, monitor.EventTypeRestartFailed, monitor.EventTypeRestartLimitReached:
-		return true
-	default:
-		return false
+func alertableProcessEventTypes() []monitor.ProcessEventType {
+	return []monitor.ProcessEventType{
+		monitor.EventTypeCrashed,
+		monitor.EventTypeRestartFailed,
+		monitor.EventTypeRestartLimitReached,
+		monitor.EventTypeClusterRestartRequested,
+		monitor.EventTypeNodeOffline,
 	}
+}
+
+func isAlertableEventType(eventType monitor.ProcessEventType) bool {
+	for _, candidate := range alertableProcessEventTypes() {
+		if candidate == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 func eventTypeToRuleKey(eventType monitor.ProcessEventType) string {
@@ -908,6 +1261,10 @@ func eventTypeToRuleKey(eventType monitor.ProcessEventType) string {
 		return AlertRuleKeyProcessRestartFailed
 	case monitor.EventTypeRestartLimitReached:
 		return AlertRuleKeyProcessRestartLimitReached
+	case monitor.EventTypeClusterRestartRequested:
+		return AlertRuleKeyClusterRestartRequested
+	case monitor.EventTypeNodeOffline:
+		return AlertRuleKeyNodeOffline
 	default:
 		return ""
 	}
@@ -974,8 +1331,9 @@ func toNotificationChannelDTO(channel *NotificationChannel) *NotificationChannel
 		Name:        channel.Name,
 		Type:        channel.Type,
 		Enabled:     channel.Enabled,
-		Endpoint:    channel.Endpoint,
+		Endpoint:    deriveNotificationChannelEndpoint(channel.Type, channel.Endpoint, unmarshalNotificationChannelConfig(channel.Type, channel.ConfigJSON)),
 		Secret:      channel.Secret,
+		Config:      unmarshalNotificationChannelConfig(channel.Type, channel.ConfigJSON),
 		Description: channel.Description,
 		CreatedAt:   channel.CreatedAt,
 		UpdatedAt:   channel.UpdatedAt,
@@ -1053,6 +1411,26 @@ func defaultClusterRules(clusterID uint) []*AlertRule {
 			Enabled:       true,
 			Threshold:     1,
 			WindowSeconds: 300,
+		},
+		{
+			ClusterID:     clusterID,
+			RuleKey:       AlertRuleKeyClusterRestartRequested,
+			RuleName:      "集群重启事件通知",
+			Description:   "当通过控制面发起集群重启时触发通知，用于邮件联动与演示验证",
+			Severity:      AlertSeverityWarning,
+			Enabled:       true,
+			Threshold:     1,
+			WindowSeconds: 60,
+		},
+		{
+			ClusterID:     clusterID,
+			RuleKey:       AlertRuleKeyNodeOffline,
+			RuleName:      "节点离线告警",
+			Description:   "当节点在宽限窗口后仍不可用时触发告警，覆盖主机离线和进程持续不可见两类场景",
+			Severity:      AlertSeverityCritical,
+			Enabled:       true,
+			Threshold:     1,
+			WindowSeconds: 60,
 		},
 	}
 }

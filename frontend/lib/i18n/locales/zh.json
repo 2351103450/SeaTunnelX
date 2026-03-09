@@ -1397,6 +1397,268 @@
       "saveSuccess": "规则已更新",
       "saveError": "更新规则失败"
     },
+    "policyCenter": {
+      "title": "告警策略中心",
+      "subtitle": "统一承接平台健康与 Prometheus 指标策略，并按能力自动裁剪功能入口。",
+      "generatedAt": "生成时间：{value}",
+      "unifiedExperienceHint": "面向用户，只保留一个统一的告警策略中心；面向系统内部，继续区分平台健康信号与 Prometheus 指标信号，并根据当前集成能力自动显示或隐藏高级构建器。",
+      "loadError": "加载告警策略中心初始化数据失败",
+      "policyListLoadError": "加载告警策略列表失败",
+      "channelListLoadError": "加载可绑定通知渠道失败",
+      "clusterListLoadError": "加载可选集群范围失败",
+      "recommended": "推荐",
+      "healthy": "健康",
+      "unhealthy": "不可用",
+      "dependsOn": "依赖：",
+      "capabilitySectionTitle": "能力状态",
+      "integrationSectionTitle": "集成依赖状态",
+      "templatesSectionTitle": "推荐策略模板",
+      "templatesSectionSubtitle": "这些模板是统一策略中心的产品骨架：平台健康模板始终可演进，指标模板则在 Prometheus 能力可用时解锁。",
+      "listTitle": "现有策略",
+      "listSubtitle": "当前共管理 {count} 条统一告警策略。",
+      "listGeneratedAt": "策略列表生成时间：{value}",
+      "builderTitle": "创建策略",
+      "builderSubtitle": "将来源模板、作用范围、严重级别、冷却时间与通知渠道沉淀为统一告警策略资源。",
+      "empty": "还没有任何统一告警策略，请先在右侧创建第一条策略。",
+      "descriptionEmpty": "暂无描述",
+      "customPromqlSummary": "自定义 PromQL 策略",
+      "allClusters": "全部集群",
+      "noChannelsSelected": "未绑定通知渠道",
+      "channelCount": "{count} 个渠道",
+      "yes": "是",
+      "no": "否",
+      "disabled": "已禁用",
+      "formInvalid": "请填写策略名称，并提供有效的模板或 PromQL 表达式。",
+      "cooldownInvalid": "冷却时间必须是合法的非负整数。",
+      "create": "创建策略",
+      "createSuccess": "告警策略创建成功",
+      "createError": "创建告警策略失败",
+      "toggleError": "更新告警策略状态失败",
+      "toggleEnabledSuccess": "告警策略已启用",
+      "toggleDisabledSuccess": "告警策略已禁用",
+      "deleteSuccess": "告警策略已删除",
+      "deleteError": "删除告警策略失败",
+      "deleteConfirm": "确认删除策略“{name}”吗？",
+      "enabledHint": "策略会立即持久化，但只有启用后才会参与评估。",
+      "sendRecoveryHint": "当告警恢复时，发送一条恢复 / resolved 通知。",
+      "channelsHint": "选择该策略触发后要投递到哪些通知渠道。",
+      "noChannelsAvailable": "当前还没有可用通知渠道。你仍然可以先创建策略，后续再绑定渠道。",
+      "builderReadyHint": "当前构建器已可用，可以创建持久化的统一告警策略资源。",
+      "builderUnavailableHint": "当前构建器暂不可用，因为所需集成能力尚未就绪。",
+      "builderStatusUnavailable": "当前选中的构建器不可用",
+      "legacyRulesTitle": "现有运行时规则入口",
+      "legacyRulesDescription": "当前按集群配置的运行时规则仍然继续生效，用来承接平台健康策略的第一阶段演进；后续会被统一策略资源替代。",
+      "legacyRulesCardTitle": "现有运行时规则",
+      "legacyRulesCardSubtitle": "兼容当前 cluster 级运行时规则配置，作为统一策略中心落地期间的过渡入口。",
+      "templateCapability": "能力键：",
+      "severityWarning": "警告",
+      "severityCritical": "严重",
+      "fields": {
+        "name": "策略名称",
+        "description": "描述",
+        "builder": "策略构建器",
+        "template": "模板",
+        "cluster": "作用集群",
+        "severity": "严重级别",
+        "cooldownMinutes": "冷却时间（分钟）",
+        "enabled": "启用",
+        "sendRecovery": "发送恢复通知",
+        "channels": "通知渠道",
+        "promql": "PromQL 表达式"
+      },
+      "placeholders": {
+        "name": "例如：生产集群 Master 不可用",
+        "description": "说明这条策略的运维含义、接收人和值守约定。",
+        "builder": "选择构建器",
+        "template": "选择模板",
+        "cluster": "选择作用范围",
+        "severity": "选择严重级别",
+        "cooldownMinutes": "0",
+        "promql": "sum(rate(seatunnel_job_failed_total[5m])) > 0"
+      },
+      "columns": {
+        "policy": "策略",
+        "source": "来源",
+        "scope": "范围",
+        "severity": "级别",
+        "channels": "渠道",
+        "recovery": "恢复通知",
+        "updatedAt": "更新时间",
+        "enabled": "启用",
+        "actions": "操作"
+      },
+      "statuses": {
+        "available": "可用",
+        "unavailable": "受限",
+        "planned": "规划中"
+      },
+      "categories": {
+        "platform_health": "平台健康模板",
+        "metrics": "指标模板"
+      },
+      "capabilities": {
+        "platform_health": {
+          "title": "平台健康策略",
+          "summary": "基于 SeaTunnelX 自身管理能力构建集群健康、节点在线、进程稳定性与运维动作类策略。"
+        },
+        "metrics_templates": {
+          "title": "指标模板",
+          "summary": "在 Prometheus 可用时，提供 CPU、内存、FD、失败作业数等指标驱动的策略模板。"
+        },
+        "custom_promql": {
+          "title": "自定义 PromQL",
+          "summary": "为高级用户提供自定义 PromQL 策略能力，但仍保持统一的策略与通知体验。"
+        },
+        "remote_ingest": {
+          "title": "远程告警回流",
+          "summary": "将 Alertmanager Webhook 回流纳入统一告警中心和统一通知链路。"
+        },
+        "webhook_notification": {
+          "title": "Webhook / IM 通知",
+          "summary": "通过 Webhook、企微、钉钉、飞书等渠道统一发送告警通知。"
+        },
+        "in_app_notification": {
+          "title": "站内通知中心",
+          "summary": "在 SeaTunnelX 内提供消息收件箱、恢复通知跟进和面向接收者的站内体验。"
+        }
+      },
+      "builders": {
+        "platform_health": {
+          "title": "平台健康策略",
+          "description": "优先构建 master 可用性、worker 数量、节点离线、Agent 离线、重启失败等产品级健康策略。"
+        },
+        "metrics_template": {
+          "title": "指标模板策略",
+          "description": "在 Prometheus 与 metrics target 就绪后，直接从模板生成 CPU、内存、FD、失败作业等指标策略。"
+        },
+        "custom_promql": {
+          "title": "自定义 PromQL",
+          "description": "在标准模板之外，为高阶场景开放自定义 PromQL 构建能力。"
+        }
+      },
+      "templates": {
+        "master_unavailable": {
+          "name": "Master 不可用",
+          "description": "当集群中没有健康 Master / 协调节点时触发。"
+        },
+        "worker_insufficient": {
+          "name": "健康 Worker 不足",
+          "description": "当健康 Worker 数量低于阈值时触发。"
+        },
+        "node_offline": {
+          "name": "节点离线",
+          "description": "当节点心跳或运行时可见性持续丢失时触发。"
+        },
+        "agent_offline": {
+          "name": "Agent 离线",
+          "description": "当控制面失去对主机 Agent 的管控连接时触发。"
+        },
+        "process_crashed": {
+          "name": "进程崩溃",
+          "description": "跟踪受管 SeaTunnel 进程的重复崩溃事件。"
+        },
+        "process_restart_failed": {
+          "name": "进程重启失败",
+          "description": "当自动拉起无法恢复故障进程时触发。"
+        },
+        "process_restart_limit_reached": {
+          "name": "达到重启上限",
+          "description": "当受管运行时出现 crash-loop 并达到重启限制时触发。"
+        },
+        "cluster_restart_requested": {
+          "name": "集群重启请求",
+          "description": "当用户在控制面发起集群重启操作时触发，用于验证通知链路或提醒运维关注变更。"
+        },
+        "cpu_usage_high": {
+          "name": "CPU 使用率高",
+          "description": "通过 Prometheus 指标检测持续 CPU 饱和。"
+        },
+        "memory_usage_high": {
+          "name": "内存使用率高",
+          "description": "通过 Prometheus 指标在节点失稳前发现内存压力。"
+        },
+        "fd_usage_high": {
+          "name": "FD 使用率高",
+          "description": "通过指标链路检测文件描述符耗尽风险。"
+        },
+        "failed_jobs_high": {
+          "name": "失败作业数升高",
+          "description": "通过 Prometheus 指标发现失败作业或重试量异常。"
+        },
+        "split_brain_risk": {
+          "name": "脑裂风险",
+          "description": "为未来的集群角色分裂 / 一致性指标预留模板槽位。"
+        }
+      },
+      "editTitle": "编辑策略",
+      "editSubtitle": "直接在统一策略中心内修改已有的统一告警策略。",
+      "editingHint": "当前正在编辑策略“{name}”，这里的保存会直接覆盖已持久化的策略资源。",
+      "editingBadge": "编辑中",
+      "editModeHint": "编辑模式会保留当前策略资源，并将改动原位写回。",
+      "cancelEdit": "取消编辑",
+      "saveChanges": "保存修改",
+      "updateSuccess": "告警策略更新成功",
+      "updateError": "更新告警策略失败",
+      "lastMatched": "最近匹配",
+      "lastDelivery": "最近投递",
+      "executionCounters": "匹配 {matches} 次 · 投递 {deliveries} 次",
+      "executionNoHistory": "暂无执行记录",
+      "executionError": "最近错误",
+      "executionStatuses": {
+        "idle": "未执行",
+        "matched": "已匹配",
+        "sent": "已发送",
+        "failed": "发送失败",
+        "partial": "部分成功"
+      },
+      "history": {
+        "title": "执行历史 · {name}",
+        "subtitle": "展示当前策略关联的最近通知投递记录。共 {total} 条 · 生成时间 {generatedAt}。",
+        "loadError": "加载告警策略执行历史失败",
+        "empty": "这条策略暂时还没有通知投递历史。",
+        "refresh": "刷新",
+        "previousPage": "上一页",
+        "nextPage": "下一页",
+        "pageSummary": "第 {page}/{totalPages} 页 · 共 {total} 条",
+        "filters": {
+          "status": "状态",
+          "eventType": "事件",
+          "allStatuses": "全部状态",
+          "allEvents": "全部事件"
+        },
+        "events": {
+          "firing": "触发",
+          "resolved": "恢复",
+          "test": "测试"
+        },
+        "columns": {
+          "channel": "渠道",
+          "event": "事件",
+          "status": "状态",
+          "responseCode": "响应码",
+          "sentAt": "发送时间",
+          "attempts": "尝试次数",
+          "error": "最近错误"
+        },
+        "statuses": {
+          "pending": "待处理",
+          "sending": "发送中",
+          "sent": "已发送",
+          "failed": "失败",
+          "retrying": "重试中",
+          "canceled": "已取消"
+        }
+      },
+      "executionLegacyRuntimeRule": "旧运行时规则桥接",
+      "executionUnifiedResourceOnly": "仅统一策略资源",
+      "bridgeHints": {
+        "legacyRuntimeRule": "这个模板当前仍通过现有 cluster 级运行时规则链路执行，因此在过渡阶段必须绑定到一个具体集群。",
+        "resourceOnly": "这类策略当前先沉淀为统一策略资源，完整评估执行链路会在后续切片接上。",
+        "directChannelDispatch": "只要这条策略已经绑定通知渠道，关键本地进程事件现在就可以直接触发统一策略通知分发。",
+        "noDirectDispatch": "在这里绑定一个或多个通知渠道后，即可开启统一策略的直接通知分发。"
+      },
+      "executionDirectChannelDispatch": "直接渠道分发"
+    },
     "phase3": {
       "entry": "通知渠道",
       "title": "通知渠道管理",
@@ -1506,6 +1768,7 @@
     "tabs": {
       "dashboard": "监控看板",
       "alerts": "告警中心",
+      "policies": "策略中心",
       "rules": "告警规则",
       "integrations": "通知渠道",
       "history": "通知历史"
@@ -1559,6 +1822,122 @@
         "failed": "失败",
         "retrying": "重试中",
         "canceled": "已取消"
+      }
+    },
+    "policyCenterV2": {
+      "title": "告警策略",
+      "subtitle": "参考 DorisManager 收敛策略编辑体验，只保留用户真正需要配置的内容。",
+      "createNew": "新建策略",
+      "policyListTitle": "策略列表",
+      "editorCreateTitle": "新建告警策略",
+      "editorEditTitle": "编辑告警策略",
+      "columns": {
+        "name": "策略名称",
+        "template": "策略模板",
+        "cluster": "作用集群",
+        "severity": "告警等级",
+        "methods": "通知方式",
+        "status": "最近执行",
+        "updatedAt": "更新时间"
+      },
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "emptyPolicies": "暂无告警策略",
+      "nameRequired": "请输入告警名称",
+      "clusterRequired": "请选择集群",
+      "templateRequired": "请选择策略模板",
+      "promqlRequired": "请输入 PromQL",
+      "concreteClusterRequired": "当前模板必须绑定具体集群",
+      "concreteClusterHint": "运行时事件类策略需要绑定具体集群，不能选择全部集群。",
+      "createSuccess": "告警策略创建成功",
+      "updateSuccess": "告警策略更新成功",
+      "deleteSuccess": "告警策略删除成功",
+      "createError": "创建告警策略失败",
+      "updateError": "更新告警策略失败",
+      "deleteError": "删除告警策略失败",
+      "cancelEdit": "取消编辑",
+      "createSubmit": "确认",
+      "saveSubmit": "保存修改",
+      "fields": {
+        "name": "告警名称",
+        "description": "描述",
+        "strategyType": "策略类型",
+        "template": "策略模板",
+        "cluster": "作用集群",
+        "promql": "PromQL",
+        "severity": "告警等级",
+        "cooldown": "最小告警间隔",
+        "enabled": "启用状态",
+        "methods": "通知方式",
+        "emailChannel": "邮件配置",
+        "webhookChannel": "Webhook 配置",
+        "recovery": "恢复通知"
+      },
+      "placeholders": {
+        "name": "例如：集群重启通知",
+        "description": "补充策略说明，方便运维团队识别告警含义。",
+        "promql": "例如：sum(rate(seatunnel_job_failed_total[5m])) > 0"
+      },
+      "staticConfig": "静态配置",
+      "staticConfigDesc": "选择平台健康或指标模板，快速生成策略。",
+      "customPromql": "自定义 PromQL",
+      "customPromqlDesc": "Prometheus 可用时，允许输入自定义查询语句。",
+      "customPromqlUnavailable": "Prometheus 未就绪，暂不可用。",
+      "groups": {
+        "platformHealth": "平台健康",
+        "prometheusMetrics": "Prometheus 指标"
+      },
+      "methods": {
+        "email": "邮件",
+        "selectEmail": "选择邮件配置",
+        "noEmailConfig": "暂无邮件配置，点击即可创建",
+        "webhook": "Webhook",
+        "selectWebhook": "选择 Webhook 配置",
+        "noWebhookConfig": "暂无 Webhook 配置"
+      },
+      "minutes": "分钟",
+      "allClusters": "全部集群",
+      "recoveryDesc": "告警恢复时发送对应的恢复通知。",
+      "channel": {
+        "manageEmail": "邮件配置",
+        "dialogTitle": "邮件通知配置",
+        "dialogSubtitle": "配置 SMTP 服务并测试邮件发送，策略中心会直接复用这里的邮件通道。",
+        "savedConfigs": "已保存邮件配置",
+        "empty": "暂无邮件配置",
+        "createTitle": "新增邮件配置",
+        "editTitle": "编辑邮件配置",
+        "nameRequired": "请输入邮件配置名称",
+        "createSuccess": "邮件配置创建成功",
+        "updateSuccess": "邮件配置保存成功",
+        "createError": "创建邮件配置失败",
+        "updateError": "保存邮件配置失败",
+        "testSuccess": "测试邮件发送成功",
+        "testError": "测试邮件发送失败",
+        "reset": "重置",
+        "test": "测试发送",
+        "createSubmit": "保存配置",
+        "saveSubmit": "保存修改",
+        "columns": {
+          "name": "名称",
+          "from": "发件地址",
+          "recipients": "收件人"
+        },
+        "fields": {
+          "name": "名称",
+          "protocol": "邮件服务协议",
+          "security": "SSL/TLS",
+          "enabled": "启用",
+          "host": "邮件服务器地址",
+          "port": "邮件服务器端口",
+          "username": "邮件服务器用户名",
+          "password": "邮件服务器密码",
+          "from": "发件地址",
+          "recipients": "告警对象",
+          "description": "描述"
+        },
+        "placeholders": {
+          "recipients": "多个收件人请用英文逗号、分号或换行分隔"
+        }
       }
     }
   },

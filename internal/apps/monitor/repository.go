@@ -247,6 +247,49 @@ func (r *Repository) GetLatestEventByNodeID(ctx context.Context, nodeID uint) (*
 	return &event, nil
 }
 
+// GetLatestEventByNodeIDAndTypes retrieves the latest event for one node limited to specific event types.
+// GetLatestEventByNodeIDAndTypes 获取某节点在指定事件类型集合中的最新事件。
+func (r *Repository) GetLatestEventByNodeIDAndTypes(ctx context.Context, nodeID uint, eventTypes []ProcessEventType) (*ProcessEvent, error) {
+	if nodeID == 0 || len(eventTypes) == 0 {
+		return nil, nil
+	}
+
+	var event ProcessEvent
+	err := r.db.WithContext(ctx).
+		Where("node_id = ? AND event_type IN ?", nodeID, eventTypes).
+		Order("created_at DESC").
+		First(&event).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &event, nil
+}
+
+// HasNodeEventAfter checks whether one node has any matching event after the specified time,
+// returning the earliest matching event in that range.
+// HasNodeEventAfter 检查某节点在指定时间之后是否存在匹配事件，并返回该时间段内最早的一条。
+func (r *Repository) HasNodeEventAfter(ctx context.Context, nodeID uint, after time.Time, eventTypes []ProcessEventType) (bool, *ProcessEvent, error) {
+	if nodeID == 0 || len(eventTypes) == 0 {
+		return false, nil, nil
+	}
+
+	var event ProcessEvent
+	err := r.db.WithContext(ctx).
+		Where("node_id = ? AND event_type IN ? AND created_at > ?", nodeID, eventTypes, after).
+		Order("created_at ASC").
+		First(&event).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return false, nil, nil
+		}
+		return false, nil, err
+	}
+	return true, &event, nil
+}
+
 // CountEventsByType counts events by type for a cluster within a time range.
 // CountEventsByType 统计集群在时间范围内按类型分组的事件数量。
 func (r *Repository) CountEventsByType(ctx context.Context, clusterID uint, eventType ProcessEventType, since *time.Time) (int64, error) {

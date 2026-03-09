@@ -34,8 +34,21 @@ import (
 // Handler provides HTTP handlers for cluster management operations.
 // Handler 提供集群管理操作的 HTTP 处理器。
 type Handler struct {
-	service   *Service
-	auditRepo *audit.Repository
+	service             *Service
+	auditRepo           *audit.Repository
+	onOperationExecuted func(context.Context, *OperationEvent) error
+}
+
+// OperationEvent represents one cluster operation notification hook payload.
+// OperationEvent 表示一条集群操作通知钩子载荷。
+type OperationEvent struct {
+	ClusterID   uint
+	ClusterName string
+	Operation   OperationType
+	Success     bool
+	Message     string
+	Operator    string
+	Trigger     string
 }
 
 // NewHandler creates a new Handler instance.
@@ -43,6 +56,21 @@ type Handler struct {
 // auditRepo may be nil; audit logging is skipped when nil.
 func NewHandler(service *Service, auditRepo *audit.Repository) *Handler {
 	return &Handler{service: service, auditRepo: auditRepo}
+}
+
+// SetOnOperationExecuted sets an optional hook invoked after a cluster operation HTTP request succeeds.
+// SetOnOperationExecuted 设置集群操作 HTTP 请求成功后的可选回调。
+func (h *Handler) SetOnOperationExecuted(fn func(context.Context, *OperationEvent) error) {
+	h.onOperationExecuted = fn
+}
+
+func (h *Handler) notifyOperationExecuted(ctx context.Context, event *OperationEvent) {
+	if h == nil || h.onOperationExecuted == nil || event == nil {
+		return
+	}
+	if err := h.onOperationExecuted(ctx, event); err != nil {
+		logger.WarnF(ctx, "[Cluster] operation event hook failed: cluster_id=%d, operation=%s, err=%v", event.ClusterID, event.Operation, err)
+	}
 }
 
 // ==================== Request/Response Types 请求/响应类型 ====================
@@ -560,6 +588,15 @@ func (h *Handler) RestartCluster(c *gin.Context) {
 	_ = audit.RecordFromGin(c, h.auditRepo, auth.GetUserIDFromContext(c), auth.GetUsernameFromContext(c),
 		"restart", "cluster", audit.UintID(uint(clusterID)), clusterName, audit.AuditDetails{"trigger": "manual"})
 	logger.InfoF(c.Request.Context(), "[Cluster] 重启集群: cluster_id=%d, success=%v", clusterID, result.Success)
+	h.notifyOperationExecuted(c.Request.Context(), &OperationEvent{
+		ClusterID:   uint(clusterID),
+		ClusterName: clusterName,
+		Operation:   OperationRestart,
+		Success:     result.Success,
+		Message:     result.Message,
+		Operator:    auth.GetUsernameFromContext(c),
+		Trigger:     "manual_api",
+	})
 	c.JSON(http.StatusOK, ClusterOperationResponse{Data: result})
 }
 

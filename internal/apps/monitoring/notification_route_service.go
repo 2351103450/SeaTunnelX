@@ -275,7 +275,7 @@ func sendTestNotification(ctx context.Context, channel *NotificationChannel) (*n
 	return sendNotification(ctx, channel, payload)
 }
 
-func buildTestPayload(channel *NotificationChannel) (map[string]interface{}, error) {
+func buildTestPayload(channel *NotificationChannel) (interface{}, error) {
 	if channel == nil {
 		return nil, fmt.Errorf("notification channel not found")
 	}
@@ -305,7 +305,10 @@ func buildTestPayload(channel *NotificationChannel) (map[string]interface{}, err
 			},
 		}, nil
 	case NotificationChannelTypeEmail:
-		return nil, fmt.Errorf("email test send is not supported yet")
+		return &emailNotificationPayload{
+			Subject: "SeaTunnelX notification test",
+			Text:    fmt.Sprintf("[SeaTunnelX] %s", message),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported channel type")
 	}

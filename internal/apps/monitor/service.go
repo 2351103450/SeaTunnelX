@@ -62,9 +62,10 @@ type NodeInfoForMonitor struct {
 // Service provides monitor configuration and event management.
 // Service 提供监控配置和事件管理。
 type Service struct {
-	repo             *Repository
-	configSender     AgentConfigSender
-	nodeProvider     ClusterNodeProvider
+	repo            *Repository
+	configSender    AgentConfigSender
+	nodeProvider    ClusterNodeProvider
+	onEventRecorded func(context.Context, *ProcessEvent) error
 }
 
 // NewService creates a new monitor service.
@@ -85,6 +86,12 @@ func (s *Service) SetConfigSender(sender AgentConfigSender) {
 // SetNodeProvider 设置集群节点提供者。
 func (s *Service) SetNodeProvider(provider ClusterNodeProvider) {
 	s.nodeProvider = provider
+}
+
+// SetOnEventRecorded sets an optional hook invoked after a process event is persisted.
+// SetOnEventRecorded 设置进程事件落库后的可选回调。
+func (s *Service) SetOnEventRecorded(fn func(context.Context, *ProcessEvent) error) {
+	s.onEventRecorded = fn
 }
 
 // ==================== MonitorConfig Operations 监控配置操作 ====================
@@ -334,6 +341,7 @@ func (s *Service) RecordEvent(ctx context.Context, event *ProcessEvent) error {
 	}
 	log.Printf("[Monitor] Recorded event: type=%s, cluster=%d, node=%d, pid=%d / 记录事件：类型=%s，集群=%d，节点=%d，PID=%d",
 		event.EventType, event.ClusterID, event.NodeID, event.PID, event.EventType, event.ClusterID, event.NodeID, event.PID)
+	s.notifyEventRecorded(ctx, event)
 	return nil
 }
 
@@ -354,6 +362,24 @@ func (s *Service) RecordEventFromReport(ctx context.Context, clusterID, nodeID, 
 		Details:     string(detailsJSON),
 	}
 	return s.RecordEvent(ctx, event)
+}
+
+func (s *Service) notifyEventRecorded(ctx context.Context, event *ProcessEvent) {
+	if s.onEventRecorded == nil || event == nil {
+		return
+	}
+
+	eventCopy := *event
+	go func(parent context.Context, copied ProcessEvent) {
+		hookCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.onEventRecorded(hookCtx, &copied); err != nil {
+			log.Printf("[Monitor] onEventRecorded failed: cluster=%d event=%d type=%s err=%v / 事件回调失败: cluster=%d event=%d type=%s err=%v",
+				copied.ClusterID, copied.ID, copied.EventType, err,
+				copied.ClusterID, copied.ID, copied.EventType, err)
+		}
+		_ = parent
+	}(ctx, eventCopy)
 }
 
 // GetEvent retrieves a process event by ID.
@@ -400,6 +426,18 @@ func (s *Service) GetLatestNodeEvent(ctx context.Context, nodeID uint) (*Process
 	return s.repo.GetLatestEventByNodeID(ctx, nodeID)
 }
 
+// GetLatestNodeEventByTypes retrieves the latest node event within the given event types.
+// GetLatestNodeEventByTypes 获取某节点在指定事件类型集合中的最新事件。
+func (s *Service) GetLatestNodeEventByTypes(ctx context.Context, nodeID uint, eventTypes []ProcessEventType) (*ProcessEvent, error) {
+	return s.repo.GetLatestEventByNodeIDAndTypes(ctx, nodeID, eventTypes)
+}
+
+// HasNodeEventAfter returns whether one node has any matching event after the given time.
+// HasNodeEventAfter 返回某节点在给定时间之后是否存在匹配事件。
+func (s *Service) HasNodeEventAfter(ctx context.Context, nodeID uint, after time.Time, eventTypes []ProcessEventType) (bool, *ProcessEvent, error) {
+	return s.repo.HasNodeEventAfter(ctx, nodeID, after, eventTypes)
+}
+
 // GetEventStats retrieves event statistics for a cluster.
 // GetEventStats 获取集群的事件统计。
 func (s *Service) GetEventStats(ctx context.Context, clusterID uint, since *time.Time) (map[ProcessEventType]int64, error) {
@@ -411,6 +449,8 @@ func (s *Service) GetEventStats(ctx context.Context, clusterID uint, since *time
 		EventTypeRestarted,
 		EventTypeRestartFailed,
 		EventTypeRestartLimitReached,
+		EventTypeNodeOffline,
+		EventTypeNodeRecovered,
 	}
 	for _, eventType := range eventTypes {
 		count, err := s.repo.CountEventsByType(ctx, clusterID, eventType, since)

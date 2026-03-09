@@ -1397,6 +1397,268 @@
       "saveSuccess": "Rule updated",
       "saveError": "Failed to update rule"
     },
+    "policyCenter": {
+      "title": "Alert Policy Center",
+      "subtitle": "Unify platform-health and Prometheus-backed policies behind one capability-aware product surface.",
+      "generatedAt": "Generated at: {value}",
+      "unifiedExperienceHint": "User-facing alerting stays unified in one policy center, while the backend continues to separate platform-health signals from Prometheus-based signals and only exposes advanced builders when the required integrations are ready.",
+      "loadError": "Failed to load alert policy center bootstrap",
+      "policyListLoadError": "Failed to load alert policies",
+      "channelListLoadError": "Failed to load notification channels for policy binding",
+      "clusterListLoadError": "Failed to load clusters for policy scope selection",
+      "recommended": "Recommended",
+      "healthy": "Healthy",
+      "unhealthy": "Unavailable",
+      "dependsOn": "Depends on:",
+      "capabilitySectionTitle": "Capability Status",
+      "integrationSectionTitle": "Integration Dependency Status",
+      "templatesSectionTitle": "Recommended Policy Templates",
+      "templatesSectionSubtitle": "These templates define the product skeleton of the unified policy center: platform-health templates always remain evolvable, while metrics templates unlock when Prometheus capabilities are available.",
+      "listTitle": "Current Policies",
+      "listSubtitle": "Currently managing {count} unified alert policies.",
+      "listGeneratedAt": "Policy list generated at: {value}",
+      "builderTitle": "Create Policy",
+      "builderSubtitle": "Persist unified alert policies that bind source templates, scope, severity, cooldown, and notification channels into one resource.",
+      "empty": "No alert policies yet. Create the first unified policy from the builder on the right.",
+      "descriptionEmpty": "No description",
+      "customPromqlSummary": "Custom PromQL policy",
+      "allClusters": "All clusters",
+      "noChannelsSelected": "No notification channels bound",
+      "channelCount": "{count} channels",
+      "yes": "Yes",
+      "no": "No",
+      "disabled": "Disabled",
+      "formInvalid": "Please provide a policy name and a valid template or PromQL expression.",
+      "cooldownInvalid": "Cooldown must be a valid non-negative integer.",
+      "create": "Create Policy",
+      "createSuccess": "Alert policy created",
+      "createError": "Failed to create alert policy",
+      "toggleError": "Failed to update alert policy state",
+      "toggleEnabledSuccess": "Alert policy enabled",
+      "toggleDisabledSuccess": "Alert policy disabled",
+      "deleteSuccess": "Alert policy deleted",
+      "deleteError": "Failed to delete alert policy",
+      "deleteConfirm": "Delete policy \"{name}\"?",
+      "enabledHint": "The policy is persisted immediately but only evaluated when enabled.",
+      "sendRecoveryHint": "Send a recovery / resolved notification when the alert clears.",
+      "channelsHint": "Select the notification channels that should receive this policy when it fires.",
+      "noChannelsAvailable": "No notification channels available yet. You can still create the policy now and bind channels later.",
+      "builderReadyHint": "This builder is available and ready to create persisted alert policy resources.",
+      "builderUnavailableHint": "This builder is currently unavailable because required integrations are not ready.",
+      "builderStatusUnavailable": "Selected builder is unavailable",
+      "legacyRulesTitle": "Current Runtime Rule Entry",
+      "legacyRulesDescription": "The existing cluster-scoped runtime rules remain active and serve as the first compatibility layer while the unified policy resource model is being introduced.",
+      "legacyRulesCardTitle": "Current Runtime Rules",
+      "legacyRulesCardSubtitle": "Keep using the current cluster-scoped runtime rule editor as a transition surface while unified alert policies are being introduced.",
+      "templateCapability": "Capability key:",
+      "severityWarning": "Warning",
+      "severityCritical": "Critical",
+      "fields": {
+        "name": "Policy Name",
+        "description": "Description",
+        "builder": "Policy Builder",
+        "template": "Template",
+        "cluster": "Scope Cluster",
+        "severity": "Severity",
+        "cooldownMinutes": "Cooldown (minutes)",
+        "enabled": "Enabled",
+        "sendRecovery": "Send Recovery",
+        "channels": "Notification Channels",
+        "promql": "PromQL Expression"
+      },
+      "placeholders": {
+        "name": "For example: Production masters unavailable",
+        "description": "Describe the operational meaning and intended responders of this policy.",
+        "builder": "Select a builder",
+        "template": "Select a template",
+        "cluster": "Select scope",
+        "severity": "Select severity",
+        "cooldownMinutes": "0",
+        "promql": "sum(rate(seatunnel_job_failed_total[5m])) > 0"
+      },
+      "columns": {
+        "policy": "Policy",
+        "source": "Source",
+        "scope": "Scope",
+        "severity": "Severity",
+        "channels": "Channels",
+        "recovery": "Recovery",
+        "updatedAt": "Updated At",
+        "enabled": "Enabled",
+        "actions": "Actions"
+      },
+      "statuses": {
+        "available": "Available",
+        "unavailable": "Limited",
+        "planned": "Planned"
+      },
+      "categories": {
+        "platform_health": "Platform Health Templates",
+        "metrics": "Metrics Templates"
+      },
+      "capabilities": {
+        "platform_health": {
+          "title": "Platform Health Policies",
+          "summary": "Build productized policies from SeaTunnelX-managed cluster health, node liveness, process stability, and operation outcomes."
+        },
+        "metrics_templates": {
+          "title": "Metrics Templates",
+          "summary": "When Prometheus is ready, unlock curated templates for CPU, memory, FD, failed jobs, and other metrics-based policies."
+        },
+        "custom_promql": {
+          "title": "Custom PromQL",
+          "summary": "Give advanced users a custom PromQL entry point while preserving a unified policy and notification experience."
+        },
+        "remote_ingest": {
+          "title": "Remote Alert Ingest",
+          "summary": "Bring Alertmanager webhook alerts into the same alert center and delivery pipeline."
+        },
+        "webhook_notification": {
+          "title": "Webhook / IM Notifications",
+          "summary": "Deliver alert notifications through Webhook, WeCom, DingTalk, Feishu, and similar webhook-compatible channels."
+        },
+        "in_app_notification": {
+          "title": "In-App Notification Center",
+          "summary": "Provide a built-in inbox, recovery follow-up, and receiver-facing experience directly inside SeaTunnelX."
+        }
+      },
+      "builders": {
+        "platform_health": {
+          "title": "Platform Health Policies",
+          "description": "Prioritize productized policies for master availability, worker sufficiency, node offline, agent offline, and restart failures."
+        },
+        "metrics_template": {
+          "title": "Metrics Template Policies",
+          "description": "Once Prometheus and metrics targets are ready, start with curated templates for CPU, memory, FD, failed jobs, and more."
+        },
+        "custom_promql": {
+          "title": "Custom PromQL",
+          "description": "Open a custom PromQL builder for advanced cases beyond the curated templates."
+        }
+      },
+      "templates": {
+        "master_unavailable": {
+          "name": "Master unavailable",
+          "description": "Fire when the cluster no longer has a healthy master / coordinator."
+        },
+        "worker_insufficient": {
+          "name": "Healthy workers below threshold",
+          "description": "Fire when the healthy worker count falls below the configured baseline."
+        },
+        "node_offline": {
+          "name": "Node offline",
+          "description": "Fire when node heartbeat or runtime visibility is lost for a sustained duration."
+        },
+        "agent_offline": {
+          "name": "Agent offline",
+          "description": "Fire when the control plane loses the agent connection needed for operations."
+        },
+        "process_crashed": {
+          "name": "Process crashed",
+          "description": "Track repeated crashes of managed SeaTunnel processes."
+        },
+        "process_restart_failed": {
+          "name": "Process restart failed",
+          "description": "Fire when automatic restart can no longer recover the failed process."
+        },
+        "process_restart_limit_reached": {
+          "name": "Restart limit reached",
+          "description": "Detect crash-loop behavior after restart limits are exceeded."
+        },
+        "cluster_restart_requested": {
+          "name": "Cluster restart requested",
+          "description": "Fire when a user triggers a cluster restart from the control plane, useful for delivery validation and change awareness."
+        },
+        "cpu_usage_high": {
+          "name": "CPU usage high",
+          "description": "Use Prometheus metrics to detect sustained CPU saturation."
+        },
+        "memory_usage_high": {
+          "name": "Memory usage high",
+          "description": "Use Prometheus metrics to catch memory pressure before node instability escalates."
+        },
+        "fd_usage_high": {
+          "name": "FD usage high",
+          "description": "Use the metrics stack to detect file-descriptor exhaustion risk."
+        },
+        "failed_jobs_high": {
+          "name": "Failed jobs high",
+          "description": "Use Prometheus metrics to detect abnormal failed-job or retry volumes."
+        },
+        "split_brain_risk": {
+          "name": "Split-brain risk",
+          "description": "Reserve a template slot for future consensus / role-divergence metrics."
+        }
+      },
+      "editTitle": "Edit Policy",
+      "editSubtitle": "Update an existing unified alert policy without leaving the unified policy center.",
+      "editingHint": "You are editing policy \"{name}\". Changes here will overwrite the persisted policy resource.",
+      "editingBadge": "Editing",
+      "editModeHint": "Edit mode keeps the existing policy resource and writes changes back in place.",
+      "cancelEdit": "Cancel",
+      "saveChanges": "Save Changes",
+      "updateSuccess": "Alert policy updated",
+      "updateError": "Failed to update alert policy",
+      "lastMatched": "Last matched",
+      "lastDelivery": "Last delivery",
+      "executionCounters": "Matches {matches} · Deliveries {deliveries}",
+      "executionNoHistory": "No execution yet",
+      "executionError": "Last error",
+      "executionStatuses": {
+        "idle": "Idle",
+        "matched": "Matched",
+        "sent": "Sent",
+        "failed": "Failed",
+        "partial": "Partial"
+      },
+      "history": {
+        "title": "Execution History · {name}",
+        "subtitle": "Latest policy-linked delivery attempts. Total {total} records · generated at {generatedAt}.",
+        "loadError": "Failed to load alert policy execution history",
+        "empty": "No delivery history for this policy yet.",
+        "refresh": "Refresh",
+        "previousPage": "Previous",
+        "nextPage": "Next",
+        "pageSummary": "Page {page}/{totalPages} · {total} records",
+        "filters": {
+          "status": "Status",
+          "eventType": "Event",
+          "allStatuses": "All statuses",
+          "allEvents": "All events"
+        },
+        "events": {
+          "firing": "Firing",
+          "resolved": "Resolved",
+          "test": "Test"
+        },
+        "columns": {
+          "channel": "Channel",
+          "event": "Event",
+          "status": "Status",
+          "responseCode": "Response Code",
+          "sentAt": "Sent At",
+          "attempts": "Attempts",
+          "error": "Last Error"
+        },
+        "statuses": {
+          "pending": "Pending",
+          "sending": "Sending",
+          "sent": "Sent",
+          "failed": "Failed",
+          "retrying": "Retrying",
+          "canceled": "Canceled"
+        }
+      },
+      "executionLegacyRuntimeRule": "Legacy runtime rule",
+      "executionUnifiedResourceOnly": "Unified resource only",
+      "bridgeHints": {
+        "legacyRuntimeRule": "This template currently executes through the existing cluster runtime rule path, so it must target one concrete cluster during the transition period.",
+        "resourceOnly": "This policy currently persists in the unified policy domain only. Its full evaluation engine will be connected in a later slice.",
+        "directChannelDispatch": "Because this policy already binds notification channels, critical local process events can now trigger direct unified policy notifications.",
+        "noDirectDispatch": "Bind one or more notification channels here to enable direct unified policy notification dispatch."
+      },
+      "executionDirectChannelDispatch": "Direct channel dispatch"
+    },
     "phase3": {
       "entry": "Notification Channels",
       "title": "Notification Channels",
@@ -1506,6 +1768,7 @@
     "tabs": {
       "dashboard": "Dashboard",
       "alerts": "Alerts",
+      "policies": "Policies",
       "rules": "Rules",
       "integrations": "Notifications",
       "history": "History"
@@ -1559,6 +1822,122 @@
         "failed": "Failed",
         "retrying": "Retrying",
         "canceled": "Canceled"
+      }
+    },
+    "policyCenterV2": {
+      "title": "Alert Policies",
+      "subtitle": "A DorisManager-inspired policy editor that keeps only the controls users actually need.",
+      "createNew": "New Policy",
+      "policyListTitle": "Policy List",
+      "editorCreateTitle": "Create Alert Policy",
+      "editorEditTitle": "Edit Alert Policy",
+      "columns": {
+        "name": "Name",
+        "template": "Template",
+        "cluster": "Cluster",
+        "severity": "Severity",
+        "methods": "Methods",
+        "status": "Last Execution",
+        "updatedAt": "Updated At"
+      },
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "emptyPolicies": "No alert policies yet",
+      "nameRequired": "Please enter a policy name",
+      "clusterRequired": "Please select a cluster",
+      "templateRequired": "Please select a template",
+      "promqlRequired": "Please enter a PromQL expression",
+      "concreteClusterRequired": "This template must be bound to a specific cluster",
+      "concreteClusterHint": "Runtime event policies must target a concrete cluster instead of all clusters.",
+      "createSuccess": "Alert policy created successfully",
+      "updateSuccess": "Alert policy updated successfully",
+      "deleteSuccess": "Alert policy deleted successfully",
+      "createError": "Failed to create alert policy",
+      "updateError": "Failed to update alert policy",
+      "deleteError": "Failed to delete alert policy",
+      "cancelEdit": "Cancel",
+      "createSubmit": "Confirm",
+      "saveSubmit": "Save",
+      "fields": {
+        "name": "Policy Name",
+        "description": "Description",
+        "strategyType": "Strategy Type",
+        "template": "Template",
+        "cluster": "Cluster",
+        "promql": "PromQL",
+        "severity": "Severity",
+        "cooldown": "Minimum Alert Interval",
+        "enabled": "Enabled",
+        "methods": "Notification Methods",
+        "emailChannel": "Email Config",
+        "webhookChannel": "Webhook Config",
+        "recovery": "Recovery Notification"
+      },
+      "placeholders": {
+        "name": "For example: Cluster restart notification",
+        "description": "Add extra notes so operators understand the alert intent quickly.",
+        "promql": "For example: sum(rate(seatunnel_job_failed_total[5m])) > 0"
+      },
+      "staticConfig": "Static Config",
+      "staticConfigDesc": "Start from platform-health or metric templates.",
+      "customPromql": "Custom PromQL",
+      "customPromqlDesc": "Write your own PromQL when Prometheus is available.",
+      "customPromqlUnavailable": "Prometheus is not ready yet.",
+      "groups": {
+        "platformHealth": "Platform Health",
+        "prometheusMetrics": "Prometheus Metrics"
+      },
+      "methods": {
+        "email": "Email",
+        "selectEmail": "Select email config",
+        "noEmailConfig": "No email config yet, click to create one",
+        "webhook": "Webhook",
+        "selectWebhook": "Select webhook config",
+        "noWebhookConfig": "No webhook config yet"
+      },
+      "minutes": "min",
+      "allClusters": "All Clusters",
+      "recoveryDesc": "Send a recovery notification after the alert is cleared.",
+      "channel": {
+        "manageEmail": "Email Config",
+        "dialogTitle": "Email Notification Config",
+        "dialogSubtitle": "Configure SMTP and test email delivery. Policies will reuse these email channels directly.",
+        "savedConfigs": "Saved Email Configs",
+        "empty": "No email config yet",
+        "createTitle": "Create Email Config",
+        "editTitle": "Edit Email Config",
+        "nameRequired": "Please enter a config name",
+        "createSuccess": "Email config created successfully",
+        "updateSuccess": "Email config saved successfully",
+        "createError": "Failed to create email config",
+        "updateError": "Failed to save email config",
+        "testSuccess": "Test email sent successfully",
+        "testError": "Failed to send test email",
+        "reset": "Reset",
+        "test": "Test Send",
+        "createSubmit": "Save Config",
+        "saveSubmit": "Save Changes",
+        "columns": {
+          "name": "Name",
+          "from": "From",
+          "recipients": "Recipients"
+        },
+        "fields": {
+          "name": "Name",
+          "protocol": "Mail Protocol",
+          "security": "SSL/TLS",
+          "enabled": "Enabled",
+          "host": "Mail Server Host",
+          "port": "Mail Server Port",
+          "username": "Username",
+          "password": "Password",
+          "from": "From Address",
+          "recipients": "Recipients",
+          "description": "Description"
+        },
+        "placeholders": {
+          "recipients": "Separate multiple recipients with commas, semicolons, or new lines"
+        }
       }
     }
   },

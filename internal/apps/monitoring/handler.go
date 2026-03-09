@@ -262,6 +262,17 @@ func (h *Handler) GetIntegrationStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, Response{Data: data})
 }
 
+// GetAlertPolicyCenterBootstrap handles GET /api/v1/monitoring/alert-policies/bootstrap.
+// GetAlertPolicyCenterBootstrap 处理统一策略中心初始化接口。
+func (h *Handler) GetAlertPolicyCenterBootstrap(c *gin.Context) {
+	data, err := h.service.GetAlertPolicyCenterBootstrap(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to load alert policy center bootstrap: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, Response{Data: data})
+}
+
 // GetPrometheusDiscovery handles GET /api/v1/monitoring/prometheus/discovery.
 // GetPrometheusDiscovery 处理 Prometheus HTTP SD 接口。
 func (h *Handler) GetPrometheusDiscovery(c *gin.Context) {

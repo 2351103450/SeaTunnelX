@@ -18,6 +18,7 @@
 package monitoring
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,43 +27,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TestNotificationChannel handles POST /api/v1/monitoring/notification-channels/:id/test
-// TestNotificationChannel 处理通知渠道测试发送接口。
-func (h *Handler) TestNotificationChannel(c *gin.Context) {
-	channelID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+// ListAlertPolicies handles GET /api/v1/monitoring/alert-policies.
+// ListAlertPolicies 处理统一告警策略列表接口。
+func (h *Handler) ListAlertPolicies(c *gin.Context) {
+	data, err := h.service.ListAlertPolicies(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid channel id"})
-		return
-	}
-
-	data, err := h.service.TestNotificationChannel(c.Request.Context(), uint(channelID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to test notification channel: " + err.Error()})
+		c.JSON(getAlertPolicyStatusCode(err), Response{ErrorMsg: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, Response{Data: data})
 }
 
-// ListNotificationDeliveries handles GET /api/v1/monitoring/notification-deliveries
-// ListNotificationDeliveries 处理通知投递历史列表接口。
-func (h *Handler) ListNotificationDeliveries(c *gin.Context) {
+// ListAlertPolicyExecutions handles GET /api/v1/monitoring/alert-policies/:id/executions.
+// ListAlertPolicyExecutions 处理统一告警策略执行历史列表接口。
+func (h *Handler) ListAlertPolicyExecutions(c *gin.Context) {
+	policyID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid policy id"})
+		return
+	}
+
 	filter := &NotificationDeliveryFilter{}
-	if policyIDStr := strings.TrimSpace(c.Query("policy_id")); policyIDStr != "" {
-		policyID, err := strconv.ParseUint(policyIDStr, 10, 32)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid policy_id"})
-			return
-		}
-		filter.PolicyID = uint(policyID)
-	}
-	if channelIDStr := strings.TrimSpace(c.Query("channel_id")); channelIDStr != "" {
-		channelID, err := strconv.ParseUint(channelIDStr, 10, 32)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid channel_id"})
-			return
-		}
-		filter.ChannelID = uint(channelID)
-	}
 	if status := strings.TrimSpace(c.Query("status")); status != "" {
 		filter.Status = NotificationDeliveryStatus(strings.ToLower(status))
 		switch filter.Status {
@@ -87,9 +72,6 @@ func (h *Handler) ListNotificationDeliveries(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid event_type"})
 			return
 		}
-	}
-	if clusterID := strings.TrimSpace(c.Query("cluster_id")); clusterID != "" {
-		filter.ClusterID = clusterID
 	}
 	if startTimeStr := strings.TrimSpace(c.Query("start_time")); startTimeStr != "" {
 		startTime, err := time.Parse(time.RFC3339, startTimeStr)
@@ -128,29 +110,18 @@ func (h *Handler) ListNotificationDeliveries(c *gin.Context) {
 		filter.PageSize = pageSize
 	}
 
-	data, err := h.service.ListNotificationDeliveries(c.Request.Context(), filter)
+	data, err := h.service.ListAlertPolicyExecutions(c.Request.Context(), uint(policyID), filter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to list notification deliveries: " + err.Error()})
+		c.JSON(getAlertPolicyStatusCode(err), Response{ErrorMsg: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, Response{Data: data})
 }
 
-// ListNotificationRoutes handles GET /api/v1/monitoring/notification-routes
-// ListNotificationRoutes 处理通知路由列表接口。
-func (h *Handler) ListNotificationRoutes(c *gin.Context) {
-	data, err := h.service.ListNotificationRoutes(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to list notification routes: " + err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, Response{Data: data})
-}
-
-// CreateNotificationRoute handles POST /api/v1/monitoring/notification-routes
-// CreateNotificationRoute 处理新增通知路由接口。
-func (h *Handler) CreateNotificationRoute(c *gin.Context) {
-	var req UpsertNotificationRouteRequest
+// CreateAlertPolicy handles POST /api/v1/monitoring/alert-policies.
+// CreateAlertPolicy 处理统一告警策略创建接口。
+func (h *Handler) CreateAlertPolicy(c *gin.Context) {
+	var req UpsertAlertPolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid request body: " + err.Error()})
 		return
@@ -160,24 +131,24 @@ func (h *Handler) CreateNotificationRoute(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.CreateNotificationRoute(c.Request.Context(), &req)
+	data, err := h.service.CreateAlertPolicy(c.Request.Context(), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to create notification route: " + err.Error()})
+		c.JSON(getAlertPolicyStatusCode(err), Response{ErrorMsg: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, Response{Data: data})
 }
 
-// UpdateNotificationRoute handles PUT /api/v1/monitoring/notification-routes/:id
-// UpdateNotificationRoute 处理更新通知路由接口。
-func (h *Handler) UpdateNotificationRoute(c *gin.Context) {
-	routeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+// UpdateAlertPolicy handles PUT /api/v1/monitoring/alert-policies/:id.
+// UpdateAlertPolicy 处理统一告警策略更新接口。
+func (h *Handler) UpdateAlertPolicy(c *gin.Context) {
+	policyID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid route id"})
+		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid policy id"})
 		return
 	}
 
-	var req UpsertNotificationRouteRequest
+	var req UpsertAlertPolicyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid request body: " + err.Error()})
 		return
@@ -187,26 +158,48 @@ func (h *Handler) UpdateNotificationRoute(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.UpdateNotificationRoute(c.Request.Context(), uint(routeID), &req)
+	data, err := h.service.UpdateAlertPolicy(c.Request.Context(), uint(policyID), &req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to update notification route: " + err.Error()})
+		c.JSON(getAlertPolicyStatusCode(err), Response{ErrorMsg: err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, Response{Data: data})
 }
 
-// DeleteNotificationRoute handles DELETE /api/v1/monitoring/notification-routes/:id
-// DeleteNotificationRoute 处理删除通知路由接口。
-func (h *Handler) DeleteNotificationRoute(c *gin.Context) {
-	routeID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+// DeleteAlertPolicy handles DELETE /api/v1/monitoring/alert-policies/:id.
+// DeleteAlertPolicy 处理统一告警策略删除接口。
+func (h *Handler) DeleteAlertPolicy(c *gin.Context) {
+	policyID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid route id"})
+		c.JSON(http.StatusBadRequest, Response{ErrorMsg: "invalid policy id"})
 		return
 	}
 
-	if err := h.service.DeleteNotificationRoute(c.Request.Context(), uint(routeID)); err != nil {
-		c.JSON(http.StatusInternalServerError, Response{ErrorMsg: "Failed to delete notification route: " + err.Error()})
+	if err := h.service.DeleteAlertPolicy(c.Request.Context(), uint(policyID)); err != nil {
+		c.JSON(getAlertPolicyStatusCode(err), Response{ErrorMsg: err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, Response{Data: gin.H{"id": routeID}})
+	c.JSON(http.StatusOK, Response{Data: gin.H{"id": uint(policyID)}})
+}
+
+func getAlertPolicyStatusCode(err error) int {
+	switch {
+	case err == nil:
+		return http.StatusOK
+	case errors.Is(err, ErrAlertPolicyNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrAlertPolicyLegacyBridgeConflict):
+		return http.StatusConflict
+	case errors.Is(err, ErrAlertPolicyInvalidID),
+		errors.Is(err, ErrAlertPolicyInvalidClusterScope),
+		errors.Is(err, ErrAlertPolicyClusterNotFound),
+		errors.Is(err, ErrAlertPolicyNotificationChannelNotFound),
+		errors.Is(err, ErrAlertPolicyUnsupportedTemplate),
+		errors.Is(err, ErrAlertPolicyTemplateTypeMismatch),
+		errors.Is(err, ErrAlertPolicyLegacyBridgeRequiresClusterScope),
+		errors.Is(err, ErrAlertPolicyLegacyRuleUnsupported):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
 }

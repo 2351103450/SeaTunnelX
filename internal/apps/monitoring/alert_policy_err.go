@@ -1,0 +1,53 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package monitoring
+
+import "errors"
+
+var (
+	// ErrAlertPolicyNotFound indicates the requested alert policy does not exist.
+	// ErrAlertPolicyNotFound 表示请求的告警策略不存在。
+	ErrAlertPolicyNotFound = errors.New("monitoring: alert policy not found")
+	// ErrAlertPolicyInvalidID indicates the alert policy ID is invalid.
+	// ErrAlertPolicyInvalidID 表示告警策略 ID 非法。
+	ErrAlertPolicyInvalidID = errors.New("monitoring: invalid alert policy id")
+	// ErrAlertPolicyInvalidClusterScope indicates the cluster scope is invalid.
+	// ErrAlertPolicyInvalidClusterScope 表示策略集群作用域非法。
+	ErrAlertPolicyInvalidClusterScope = errors.New("monitoring: invalid alert policy cluster scope")
+	// ErrAlertPolicyClusterNotFound indicates the referenced cluster does not exist.
+	// ErrAlertPolicyClusterNotFound 表示引用的集群不存在。
+	ErrAlertPolicyClusterNotFound = errors.New("monitoring: alert policy cluster not found")
+	// ErrAlertPolicyNotificationChannelNotFound indicates a referenced channel does not exist.
+	// ErrAlertPolicyNotificationChannelNotFound 表示引用的通知渠道不存在。
+	ErrAlertPolicyNotificationChannelNotFound = errors.New("monitoring: alert policy notification channel not found")
+	// ErrAlertPolicyUnsupportedTemplate indicates the template key is unknown.
+	// ErrAlertPolicyUnsupportedTemplate 表示模板键不存在。
+	ErrAlertPolicyUnsupportedTemplate = errors.New("monitoring: unsupported alert policy template")
+	// ErrAlertPolicyTemplateTypeMismatch indicates the template does not match the policy type.
+	// ErrAlertPolicyTemplateTypeMismatch 表示模板与策略类型不匹配。
+	ErrAlertPolicyTemplateTypeMismatch = errors.New("monitoring: alert policy template type mismatch")
+	// ErrAlertPolicyLegacyBridgeRequiresClusterScope indicates a legacy-backed policy must target one cluster.
+	// ErrAlertPolicyLegacyBridgeRequiresClusterScope 表示旧规则桥接策略必须绑定具体集群。
+	ErrAlertPolicyLegacyBridgeRequiresClusterScope = errors.New("monitoring: legacy-backed policy requires concrete cluster scope")
+	// ErrAlertPolicyLegacyRuleUnsupported indicates the referenced legacy rule bridge target is unsupported.
+	// ErrAlertPolicyLegacyRuleUnsupported 表示引用的旧规则桥接目标不受支持。
+	ErrAlertPolicyLegacyRuleUnsupported = errors.New("monitoring: unsupported legacy rule bridge")
+	// ErrAlertPolicyLegacyBridgeConflict indicates another policy already bridges the same legacy rule.
+	// ErrAlertPolicyLegacyBridgeConflict 表示已有其他策略桥接到同一条旧规则。
+	ErrAlertPolicyLegacyBridgeConflict = errors.New("monitoring: duplicate legacy rule bridge policy")
+)

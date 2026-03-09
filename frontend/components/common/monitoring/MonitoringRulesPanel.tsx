@@ -43,7 +43,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-export function MonitoringRulesPanel() {
+type MonitoringRulesPanelProps = {
+  embedded?: boolean;
+};
+
+export function MonitoringRulesPanel({
+  embedded = false,
+}: MonitoringRulesPanelProps) {
   const t = useTranslations('monitoringCenter');
 
   const [clusters, setClusters] = useState<ClusterInfo[]>([]);
@@ -97,7 +103,9 @@ export function MonitoringRulesPanel() {
   }, [loadRules]);
 
   const patchRule = (ruleId: number, patch: Partial<AlertRule>) => {
-    setRules((prev) => prev.map((rule) => (rule.id === ruleId ? {...rule, ...patch} : rule)));
+    setRules((prev) =>
+      prev.map((rule) => (rule.id === ruleId ? {...rule, ...patch} : rule)),
+    );
   };
 
   const handleSaveRule = async (rule: AlertRule) => {
@@ -132,10 +140,24 @@ export function MonitoringRulesPanel() {
   return (
     <div className='space-y-4'>
       <Card>
-        <CardHeader>
-          <CardTitle>{t('rules.title')}</CardTitle>
+        <CardHeader className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
+          <div className='space-y-1'>
+            <CardTitle>
+              {embedded
+                ? t('policyCenter.legacyRulesCardTitle')
+                : t('rules.title')}
+            </CardTitle>
+            {embedded ? (
+              <p className='text-sm text-muted-foreground'>
+                {t('policyCenter.legacyRulesCardSubtitle')}
+              </p>
+            ) : null}
+          </div>
           <div className='w-full md:w-72'>
-            <Select value={selectedClusterId} onValueChange={setSelectedClusterId}>
+            <Select
+              value={selectedClusterId}
+              onValueChange={setSelectedClusterId}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t('rules.clusterSelect')} />
               </SelectTrigger>
@@ -170,20 +192,28 @@ export function MonitoringRulesPanel() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className='text-center text-muted-foreground'>
+                    <TableCell
+                      colSpan={7}
+                      className='text-center text-muted-foreground'
+                    >
                       {t('loading')}
                     </TableCell>
                   </TableRow>
                 ) : !rules.length ? (
                   <TableRow>
-                    <TableCell colSpan={7} className='text-center text-muted-foreground'>
+                    <TableCell
+                      colSpan={7}
+                      className='text-center text-muted-foreground'
+                    >
                       {t('rules.noRules')}
                     </TableCell>
                   </TableRow>
                 ) : (
                   rules.map((rule) => (
                     <TableRow key={rule.id}>
-                      <TableCell className='font-medium'>{rule.rule_name}</TableCell>
+                      <TableCell className='font-medium'>
+                        {rule.rule_name}
+                      </TableCell>
                       <TableCell className='max-w-[340px] break-all'>
                         {rule.description}
                       </TableCell>
@@ -191,7 +221,9 @@ export function MonitoringRulesPanel() {
                         <Select
                           value={rule.severity}
                           onValueChange={(value) =>
-                            patchRule(rule.id, {severity: value as AlertSeverity})
+                            patchRule(rule.id, {
+                              severity: value as AlertSeverity,
+                            })
                           }
                         >
                           <SelectTrigger className='w-[130px]'>

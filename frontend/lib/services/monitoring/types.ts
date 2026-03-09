@@ -363,12 +363,138 @@ export interface IntegrationStatusData {
   components: IntegrationComponentStatus[];
 }
 
+export type AlertPolicyCapabilityStatus =
+  | 'available'
+  | 'unavailable'
+  | 'planned';
+
+export type AlertPolicyBuilderKind =
+  | 'platform_health'
+  | 'metrics_template'
+  | 'custom_promql';
+
+export type AlertPolicyExecutionStatus =
+  | 'idle'
+  | 'matched'
+  | 'sent'
+  | 'failed'
+  | 'partial';
+
+export interface AlertPolicyCapability {
+  key: string;
+  title: string;
+  summary: string;
+  status: AlertPolicyCapabilityStatus | string;
+  reason?: string;
+  depends_on?: string[];
+}
+
+export interface AlertPolicyBuilderOption {
+  key: AlertPolicyBuilderKind | string;
+  title: string;
+  description: string;
+  status: AlertPolicyCapabilityStatus | string;
+  capability_key: string;
+  recommended: boolean;
+}
+
+export interface AlertPolicyTemplateSummary {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  source_kind: string;
+  capability_key: string;
+  legacy_rule_key?: string;
+  recommended: boolean;
+}
+
+export interface AlertPolicyCenterBootstrapData {
+  generated_at: string;
+  capability_mode: string;
+  capabilities: AlertPolicyCapability[];
+  builders: AlertPolicyBuilderOption[];
+  templates: AlertPolicyTemplateSummary[];
+  components: IntegrationComponentStatus[];
+}
+
+export interface AlertPolicyCondition {
+  metric_key: string;
+  operator: string;
+  threshold: string;
+  window_minutes: number;
+}
+
+export interface AlertPolicy {
+  id: number;
+  name: string;
+  description: string;
+  policy_type: AlertPolicyBuilderKind | string;
+  template_key?: string;
+  legacy_rule_key?: string;
+  cluster_id?: string;
+  severity: AlertSeverity;
+  enabled: boolean;
+  cooldown_minutes: number;
+  send_recovery: boolean;
+  promql?: string;
+  conditions: AlertPolicyCondition[];
+  notification_channel_ids: number[];
+  match_count: number;
+  delivery_count: number;
+  last_matched_at?: string | null;
+  last_delivered_at?: string | null;
+  last_execution_status: AlertPolicyExecutionStatus | string;
+  last_execution_error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertPolicyListData {
+  generated_at: string;
+  total: number;
+  policies: AlertPolicy[];
+}
+
+export interface UpsertAlertPolicyRequest {
+  name: string;
+  description?: string;
+  policy_type: AlertPolicyBuilderKind;
+  template_key?: string;
+  legacy_rule_key?: string;
+  cluster_id?: string;
+  severity: AlertSeverity;
+  enabled?: boolean;
+  cooldown_minutes?: number;
+  send_recovery?: boolean;
+  promql?: string;
+  conditions?: AlertPolicyCondition[];
+  notification_channel_ids?: number[];
+}
+
 export type NotificationChannelType =
   | 'webhook'
   | 'email'
   | 'wecom'
   | 'dingtalk'
   | 'feishu';
+
+export type NotificationEmailSecurity = 'none' | 'starttls' | 'ssl';
+
+export interface NotificationChannelEmailConfig {
+  protocol: string;
+  security: NotificationEmailSecurity;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  from: string;
+  recipients: string[];
+}
+
+export interface NotificationChannelConfig {
+  email?: NotificationChannelEmailConfig | null;
+}
 
 export interface NotificationChannel {
   id: number;
@@ -377,6 +503,7 @@ export interface NotificationChannel {
   enabled: boolean;
   endpoint: string;
   secret: string;
+  config?: NotificationChannelConfig | null;
   description: string;
   created_at: string;
   updated_at: string;
@@ -392,8 +519,9 @@ export interface UpsertNotificationChannelRequest {
   name: string;
   type: NotificationChannelType;
   enabled?: boolean;
-  endpoint: string;
+  endpoint?: string;
   secret?: string;
+  config?: NotificationChannelConfig | null;
   description?: string;
 }
 
@@ -443,6 +571,7 @@ export interface NotificationDelivery {
   alert_id: string;
   source_type: string;
   source_key: string;
+  policy_id: number;
   cluster_id?: string;
   cluster_name?: string;
   alert_name?: string;
@@ -467,6 +596,7 @@ export interface NotificationDeliveryListData {
 }
 
 export interface NotificationDeliveryFilterParams {
+  policy_id?: number;
   channel_id?: number;
   status?: NotificationDeliveryStatus;
   event_type?: NotificationDeliveryEventType;
