@@ -1,0 +1,52 @@
+{
+  "id": "alerting-notification-analysis",
+  "name": "alerting-notification-analysis",
+  "title": "brainstorm: analyze alerting and notification completeness",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "openai-agent",
+  "assignee": "openai-agent",
+  "createdAt": "2026-03-08",
+  "completedAt": null,
+  "branch": "analysis/alerting-notification-gap",
+  "base_branch": "analysis/alerting-notification-gap",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "docs/observability-remote-integration-guide.md",
+    "frontend/components/common/monitoring/MonitoringAlertsCenter.tsx",
+    "frontend/components/common/monitoring/MonitoringIntegrationsPanel.tsx",
+    "frontend/components/common/monitoring/MonitoringRulesPanel.tsx",
+    "internal/apps/monitoring/model.go",
+    "internal/apps/monitoring/remote_integration.go",
+    "internal/apps/monitoring/service.go"
+  ],
+  "notes": "",
+  "meta": {}
+}
