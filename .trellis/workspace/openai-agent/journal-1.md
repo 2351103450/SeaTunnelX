@@ -120,3 +120,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Chunk upload and cluster config cleanup
+
+**Date**: 2026-03-10
+**Task**: Chunk upload and cluster config cleanup
+
+### Summary
+
+Implemented end-to-end package chunk upload (backend route/handler/service/tests + frontend service/hook/dialog real progress), refined cluster add/edit node defaults and i18n for JVM/ports, enhanced restart.sh build/restart mode matrix with help docs, and archived completed 03-09 add-node-role-jvm-json-override task.
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `926cfce` | (see git log) |
+| `2bd0f7b` | (see git log) |
+| `4e914f6` | (see git log) |
+| `19cdb76` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
