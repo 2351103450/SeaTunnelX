@@ -41,6 +41,8 @@ import {useThemeUtils} from '@/hooks/use-theme-utils';
 import {useAuth} from '@/hooks/use-auth';
 import {CountingNumber} from '@/components/animate-ui/text/counting-number';
 import {Button} from '@/components/ui/button';
+import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
 import Link from 'next/link';
 import {
   Dialog,
@@ -52,6 +54,7 @@ import {
 import {Avatar, AvatarFallback, AvatarImage} from '@/components/ui/avatar';
 import {TrustLevel} from '@/lib/services/core';
 import {useLocale, locales, localeNames, Locale} from '@/lib/i18n';
+import services from '@/lib/services';
 
 const IconOptions = {
   className: 'h-4 w-4',
@@ -78,14 +81,24 @@ const StaticIcons = {
 // 个人信息按钮 - 独立组件
 const ProfileButton = memo(() => {
   const themeUtils = useThemeUtils();
-  const {user, isLoading, logout} = useAuth();
+  const {user, isLoading, logout, checkAuthStatus} = useAuth();
   const {locale, setLocale} = useLocale();
   const [mounted, setMounted] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSaved, setEmailSaved] = useState(false);
   const t = useTranslations('profile');
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    setEmailDraft(user?.email || '');
+    setEmailError(null);
+    setEmailSaved(false);
+  }, [user?.email, user?.id]);
 
   const getTrustLevelText = (level: number): string => {
     switch (level) {
@@ -108,6 +121,35 @@ const ProfileButton = memo(() => {
     logout('/login').catch((error) => {
       console.error('登出失败:', error);
     });
+  };
+
+  const handleSaveEmail = async () => {
+    if (!user) {
+      return;
+    }
+
+    const nextEmail = emailDraft.trim();
+    if (!nextEmail) {
+      setEmailError(t('emailRequired'));
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setEmailError(t('invalidEmail'));
+      return;
+    }
+
+    try {
+      setSavingEmail(true);
+      setEmailError(null);
+      await services.auth.updateProfile({email: nextEmail});
+      await checkAuthStatus(true);
+      setEmailSaved(true);
+    } catch (error) {
+      setEmailError(error instanceof Error ? error.message : t('emailSaveFailed'));
+      setEmailSaved(false);
+    } finally {
+      setSavingEmail(false);
+    }
   };
 
   return (
@@ -183,6 +225,46 @@ const ProfileButton = memo(() => {
                   </div>
                 </div>
               )}
+
+              <div>
+                <h4 className='text-sm font-semibold mb-3 text-muted-foreground'>
+                  {t('emailSettings')}
+                </h4>
+                <div className='space-y-2'>
+                  <Label htmlFor='profile-email'>{t('emailLabel')}</Label>
+                  <div className='flex items-center gap-2'>
+                    <Input
+                      id='profile-email'
+                      type='email'
+                      value={emailDraft}
+                      placeholder={t('emailPlaceholder')}
+                      onChange={(event) => {
+                        setEmailDraft(event.target.value);
+                        setEmailError(null);
+                        setEmailSaved(false);
+                      }}
+                      disabled={savingEmail}
+                    />
+                    <Button
+                      size='sm'
+                      onClick={handleSaveEmail}
+                      disabled={
+                        savingEmail ||
+                        !user ||
+                        emailDraft.trim() === (user.email || '').trim()
+                      }
+                    >
+                      {savingEmail ? t('savingEmail') : t('saveEmail')}
+                    </Button>
+                  </div>
+                  {emailError ? (
+                    <p className='text-xs text-destructive'>{emailError}</p>
+                  ) : null}
+                  {!emailError && emailSaved ? (
+                    <p className='text-xs text-emerald-600'>{t('emailSaved')}</p>
+                  ) : null}
+                </div>
+              </div>
             </>
           )}
 

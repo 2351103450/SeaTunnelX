@@ -137,6 +137,7 @@ func Serve() {
 			apiV1Router.POST("/auth/login", auth.Login)
 			apiV1Router.POST("/auth/logout", auth.LoginRequired(), auth.Logout)
 			apiV1Router.GET("/auth/user-info", auth.LoginRequired(), auth.GetUserInfo)
+			apiV1Router.PUT("/auth/profile", auth.LoginRequired(), auth.UpdateProfile)
 
 			// OAuth（备选登录方式：GitHub、Google）
 			apiV1Router.GET("/oauth/providers", oauth.GetEnabledProvidersHandler)

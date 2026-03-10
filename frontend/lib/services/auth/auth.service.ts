@@ -20,6 +20,7 @@ import {
   CallbackRequest,
   LoginRequest,
   LoginResponseData,
+  UpdateProfileRequest,
   UserInfoResponse,
 } from './types';
 
@@ -78,6 +79,17 @@ export class AuthService extends BaseService {
    */
   static async getUserInfo(): Promise<UserInfoResponse['data']> {
     return this.get<UserInfoResponse['data']>('/user-info');
+  }
+
+  /**
+   * 更新当前登录用户个人信息（目前仅邮箱）。
+   * @param payload - 个人信息更新请求
+   * @returns 更新后的用户信息
+   */
+  static async updateProfile(
+    payload: UpdateProfileRequest,
+  ): Promise<UserInfoResponse['data']> {
+    return this.put<UserInfoResponse['data']>('/profile', payload);
   }
 
   /**

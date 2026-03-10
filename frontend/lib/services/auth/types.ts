@@ -70,3 +70,16 @@ export type CallbackResponse = ApiResponse<null>;
  * 用户信息响应
  */
 export type UserInfoResponse = ApiResponse<BasicUserInfo>;
+
+/**
+ * 更新个人信息请求
+ */
+export interface UpdateProfileRequest {
+  /** 邮箱 */
+  email: string;
+}
+
+/**
+ * 更新个人信息响应
+ */
+export type UpdateProfileResponse = ApiResponse<BasicUserInfo>;

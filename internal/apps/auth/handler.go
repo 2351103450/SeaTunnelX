@@ -20,6 +20,7 @@ package auth
 
 import (
 	"net/http"
+	"net/mail"
 	"strings"
 
 	"github.com/gin-contrib/sessions"
@@ -65,6 +66,17 @@ type UserInfoResponse struct {
 type LogoutResponse struct {
 	ErrorMsg string      `json:"error_msg"`
 	Data     interface{} `json:"data"`
+}
+
+// UpdateProfileRequest 更新当前登录用户的个人信息请求。
+type UpdateProfileRequest struct {
+	Email string `json:"email" binding:"required,max=255"`
+}
+
+// UpdateProfileResponse 更新当前登录用户的个人信息响应。
+type UpdateProfileResponse struct {
+	ErrorMsg string    `json:"error_msg"`
+	Data     *UserInfo `json:"data"`
 }
 
 // Login 处理用户登录
@@ -181,6 +193,56 @@ func GetUserInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, UserInfoResponse{Data: user.ToUserInfo()})
+}
+
+// UpdateProfile 更新当前登录用户的个人信息（目前支持邮箱）。
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body UpdateProfileRequest true "更新个人信息请求"
+// @Success 200 {object} UpdateProfileResponse
+// @Router /api/v1/auth/profile [put]
+func UpdateProfile(c *gin.Context) {
+	userID := GetUserIDFromContext(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, UpdateProfileResponse{ErrorMsg: "未登录"})
+		return
+	}
+
+	var req UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, UpdateProfileResponse{ErrorMsg: err.Error()})
+		return
+	}
+
+	email := strings.TrimSpace(req.Email)
+	if email == "" {
+		c.JSON(http.StatusBadRequest, UpdateProfileResponse{ErrorMsg: "邮箱不能为空 / Email is required"})
+		return
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		c.JSON(http.StatusBadRequest, UpdateProfileResponse{ErrorMsg: "邮箱格式不正确 / Invalid email format"})
+		return
+	}
+
+	user, err := FindByID(db.GetDB(c.Request.Context()), userID)
+	if err != nil {
+		logger.ErrorF(c.Request.Context(), "[Auth] 更新个人信息失败，用户不存在: %d, %v", userID, err)
+		c.JSON(http.StatusNotFound, UpdateProfileResponse{ErrorMsg: "用户不存在"})
+		return
+	}
+
+	if err := db.GetDB(c.Request.Context()).
+		Model(user).
+		Update("email", email).Error; err != nil {
+		logger.ErrorF(c.Request.Context(), "[Auth] 更新个人邮箱失败: user_id=%d err=%v", userID, err)
+		c.JSON(http.StatusInternalServerError, UpdateProfileResponse{ErrorMsg: ErrMsgInternalError})
+		return
+	}
+
+	user.Email = email
+	logger.InfoF(c.Request.Context(), "[Auth] 更新个人邮箱成功: user_id=%d", userID)
+	c.JSON(http.StatusOK, UpdateProfileResponse{Data: user.ToUserInfo()})
 }
 
 // GetUserIDFromContext 从 Gin 上下文获取用户 ID
