@@ -44,6 +44,7 @@ import (
 	pb "github.com/seatunnel/seatunnelX/agent"
 	"github.com/seatunnel/seatunnelX/agent/internal/collector"
 	"github.com/seatunnel/seatunnelX/agent/internal/config"
+	agentdiagnostics "github.com/seatunnel/seatunnelX/agent/internal/diagnostics"
 	"github.com/seatunnel/seatunnelX/agent/internal/discovery"
 	"github.com/seatunnel/seatunnelX/agent/internal/executor"
 	agentgrpc "github.com/seatunnel/seatunnelX/agent/internal/grpc"
@@ -113,6 +114,10 @@ type Agent struct {
 	// eventReporter 处理进程事件上报
 	eventReporter *monitor.EventReporter
 
+	// errorCollector handles incremental Seatunnel ERROR log collection.
+	// errorCollector 处理 Seatunnel ERROR 日志增量采集。
+	errorCollector *agentdiagnostics.Collector
+
 	// wg tracks running goroutines for graceful shutdown
 	// wg 跟踪运行中的 goroutine 以实现优雅关闭
 	wg sync.WaitGroup
@@ -155,6 +160,9 @@ func NewAgent(cfg *config.Config) *Agent {
 	// Create event reporter / 创建事件上报器
 	er := monitor.NewEventReporter(nil) // Will set report func later / 稍后设置上报函数
 
+	// Create diagnostics error collector / 创建诊断错误采集器
+	ec := agentdiagnostics.NewCollector(grpcClient)
+
 	return &Agent{
 		config:           cfg,
 		ctx:              ctx,
@@ -167,6 +175,7 @@ func NewAgent(cfg *config.Config) *Agent {
 		processMonitor:   pmon,
 		autoRestarter:    ar,
 		eventReporter:    er,
+		errorCollector:   ec,
 	}
 }
 
@@ -636,6 +645,11 @@ func (a *Agent) startBackgroundServices() {
 		defer a.wg.Done()
 		a.runConnectionMonitor()
 	}()
+
+	// Start diagnostics error collector / 启动诊断错误采集器
+	if a.errorCollector != nil {
+		a.errorCollector.Start(a.ctx)
+	}
 }
 
 // runHeartbeatLoop runs the heartbeat sending loop
@@ -852,6 +866,8 @@ func (a *Agent) registerCommandHandlers() {
 
 	// Register diagnostic handlers / 注册诊断处理器
 	a.executor.RegisterHandler(pb.CommandType_COLLECT_LOGS, a.handleCollectLogsCommand)
+	a.executor.RegisterHandler(pb.CommandType_THREAD_DUMP, a.handleThreadDumpCommand)
+	a.executor.RegisterHandler(pb.CommandType_JVM_DUMP, a.handleJVMDumpCommand)
 
 	// Register cluster discovery and monitoring handlers / 注册集群发现和监控处理器
 	a.executor.RegisterHandler(pb.CommandType_DISCOVER_CLUSTERS, a.handleDiscoverClustersCommand)
@@ -1352,6 +1368,51 @@ func (a *Agent) handleCollectLogsCommand(ctx context.Context, cmd *pb.CommandReq
 	return executor.CreateSuccessResponse(cmd.CommandId, string(output)), nil
 }
 
+func (a *Agent) handleThreadDumpCommand(ctx context.Context, cmd *pb.CommandRequest, reporter executor.ProgressReporter) (*pb.CommandResponse, error) {
+	reporter.Report(10, "Collecting thread dump... / 正在采集线程栈...")
+
+	installDir := getParamString(cmd.Parameters, "install_dir", a.config.SeaTunnel.InstallDir)
+	role := getParamString(cmd.Parameters, "role", "")
+	outputDir := getParamString(cmd.Parameters, "output_dir", filepath.Join(installDir, "logs", "diagnostics"))
+
+	result, err := agentdiagnostics.CollectThreadDump(ctx, installDir, role, outputDir)
+	if err != nil {
+		return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to collect thread dump: %v / 采集线程栈失败：%v", err, err)), nil
+	}
+	payload, err := agentdiagnostics.MarshalThreadDumpResult(result)
+	if err != nil {
+		return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to encode thread dump result: %v / 编码线程栈结果失败：%v", err, err)), nil
+	}
+
+	reporter.Report(100, "Thread dump collected / 线程栈采集完成")
+	return executor.CreateSuccessResponse(cmd.CommandId, payload), nil
+}
+
+func (a *Agent) handleJVMDumpCommand(ctx context.Context, cmd *pb.CommandRequest, reporter executor.ProgressReporter) (*pb.CommandResponse, error) {
+	reporter.Report(10, "Preparing JVM dump... / 准备采集 JVM Dump...")
+
+	installDir := getParamString(cmd.Parameters, "install_dir", a.config.SeaTunnel.InstallDir)
+	role := getParamString(cmd.Parameters, "role", "")
+	outputDir := getParamString(cmd.Parameters, "output_dir", filepath.Join(installDir, "logs", "diagnostics"))
+	minFreeMB := getParamInt(cmd.Parameters, "min_free_mb", agentdiagnostics.DefaultJVMDumpMinFreeMB)
+
+	result, err := agentdiagnostics.CollectJVMDump(ctx, installDir, role, outputDir, int64(minFreeMB)*1024*1024)
+	if err != nil {
+		return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to create JVM dump: %v / 生成 JVM Dump 失败：%v", err, err)), nil
+	}
+	payload, err := agentdiagnostics.MarshalJVMDumpResult(result)
+	if err != nil {
+		return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to encode JVM dump result: %v / 编码 JVM Dump 结果失败：%v", err, err)), nil
+	}
+
+	if result.Status == agentdiagnostics.DumpStatusSkipped {
+		reporter.Report(100, "JVM dump skipped due to disk policy / JVM Dump 因磁盘策略被跳过")
+	} else {
+		reporter.Report(100, "JVM dump created / JVM Dump 采集完成")
+	}
+	return executor.CreateSuccessResponse(cmd.CommandId, payload), nil
+}
+
 // readLastNLines reads the last N lines from a file
 // readLastNLines 从文件中读取最后 N 行
 func readLastNLines(filename string, n int) ([]byte, error) {
@@ -1745,6 +1806,36 @@ func (a *Agent) handleDiscoverClustersCommand(ctx context.Context, cmd *pb.Comma
 	return executor.CreateSuccessResponse(cmd.CommandId, string(jsonOutput)), nil
 }
 
+func (a *Agent) updateDiagnosticsTargets(ctx context.Context, trackedProcessesJSON string) {
+	if a.errorCollector == nil {
+		return
+	}
+
+	targets := make([]*agentdiagnostics.ScanTarget, 0)
+	if strings.TrimSpace(trackedProcessesJSON) != "" {
+		var trackedProcesses []struct {
+			PID        int    `json:"pid"`
+			Name       string `json:"name"`
+			InstallDir string `json:"install_dir"`
+			Role       string `json:"role"`
+		}
+		if err := json.Unmarshal([]byte(trackedProcessesJSON), &trackedProcesses); err != nil {
+			logger.ErrorF(ctx, "[Agent] Failed to parse diagnostics tracked_processes: %v / 解析 diagnostics tracked_processes 失败：%v", err, err)
+			return
+		}
+		for _, proc := range trackedProcesses {
+			targets = append(targets, &agentdiagnostics.ScanTarget{
+				Name:       proc.Name,
+				InstallDir: proc.InstallDir,
+				Role:       proc.Role,
+			})
+		}
+	}
+
+	a.errorCollector.ReplaceTargets(targets)
+	logger.InfoF(ctx, "[Diagnostics] Updated %d scan targets / 已更新 %d 个诊断扫描目标", len(targets), len(targets))
+}
+
 // handleUpdateMonitorConfigCommand handles the UPDATE_MONITOR_CONFIG command
 // handleUpdateMonitorConfigCommand 处理 UPDATE_MONITOR_CONFIG 命令
 // Requirements 5.5: Apply new config immediately without restart
@@ -1753,7 +1844,9 @@ func (a *Agent) handleUpdateMonitorConfigCommand(ctx context.Context, cmd *pb.Co
 	reporter.Report(10, "Updating monitor config... / 更新监控配置...")
 
 	// Parse config from parameters / 从参数解析配置
+	autoMonitorEnabled := getParamBool(cmd.Parameters, "auto_monitor", true)
 	autoRestartEnabled := getParamBool(cmd.Parameters, "auto_restart", true)
+	trackedProcessesJSON := getParamString(cmd.Parameters, "tracked_processes", "")
 	config := &restart.RestartConfig{
 		Enabled:        autoRestartEnabled,
 		RestartDelay:   time.Duration(getParamInt(cmd.Parameters, "restart_delay", 10)) * time.Second,
@@ -1770,24 +1863,30 @@ func (a *Agent) handleUpdateMonitorConfigCommand(ctx context.Context, cmd *pb.Co
 		a.processMonitor.SetMonitorInterval(time.Duration(monitorInterval) * time.Second)
 	}
 
-	// If auto-restart is disabled, untrack all processes immediately
-	// 如果禁用了自动重启，静默取消跟踪所有进程（不发送事件，因为进程仍在运行）
-	if !autoRestartEnabled {
-		trackedProcesses := a.processMonitor.GetAllTrackedProcesses()
-		for _, proc := range trackedProcesses {
-			// Use silent untrack - process is still running, we just stop monitoring
-			// 使用静默取消跟踪 - 进程仍在运行，我们只是停止监控
-			a.processMonitor.UntrackProcessSilent(proc.Name)
-			logger.InfoF(ctx, "[Agent] Auto-restart disabled, stopped monitoring process: %s / 自动重启已禁用，停止监控进程：%s",
-				proc.Name, proc.Name)
-		}
-		reporter.Report(100, "Monitor config updated (auto-restart disabled, stopped monitoring) / 监控配置已更新（自动重启已禁用，停止监控）")
-		return executor.CreateSuccessResponse(cmd.CommandId, "Monitor config updated, auto-restart disabled / 监控配置已更新，自动重启已禁用"), nil
+	// Update diagnostics scan targets from Control Plane.
+	// Diagnostics binds to managed monitoring targets instead of auto-restart.
+	// 根据 Control Plane 下发的受管进程刷新诊断扫描目标。
+	if autoMonitorEnabled {
+		a.updateDiagnosticsTargets(ctx, trackedProcessesJSON)
+	} else {
+		a.updateDiagnosticsTargets(ctx, "")
 	}
 
-	// Auto-restart is enabled, parse and track processes from Control Plane
-	// 自动重启已启用，解析并跟踪来自 Control Plane 的进程
-	trackedProcessesJSON := getParamString(cmd.Parameters, "tracked_processes", "")
+	// If auto-monitor is disabled, untrack all processes immediately.
+	// 如果禁用了自动监控，静默取消跟踪所有进程（不发送事件，因为进程仍在运行）
+	if !autoMonitorEnabled {
+		trackedProcesses := a.processMonitor.GetAllTrackedProcesses()
+		for _, proc := range trackedProcesses {
+			a.processMonitor.UntrackProcessSilent(proc.Name)
+			logger.InfoF(ctx, "[Agent] Auto-monitor disabled, stopped monitoring process: %s / 自动监控已禁用，停止监控进程：%s",
+				proc.Name, proc.Name)
+		}
+		reporter.Report(100, "Monitor config updated (auto-monitor disabled, stopped monitoring) / 监控配置已更新（自动监控已禁用，停止监控）")
+		return executor.CreateSuccessResponse(cmd.CommandId, "Monitor config updated, auto-monitor disabled / 监控配置已更新，自动监控已禁用"), nil
+	}
+
+	// Parse and track processes from Control Plane.
+	// 解析并跟踪来自 Control Plane 的受管进程。
 	if trackedProcessesJSON != "" {
 		var trackedProcesses []struct {
 			PID        int    `json:"pid"`
@@ -1798,7 +1897,21 @@ func (a *Agent) handleUpdateMonitorConfigCommand(ctx context.Context, cmd *pb.Co
 		if err := json.Unmarshal([]byte(trackedProcessesJSON), &trackedProcesses); err != nil {
 			logger.ErrorF(ctx, "[Agent] Failed to parse tracked_processes: %v / 解析 tracked_processes 失败：%v", err, err)
 		} else {
-			logger.InfoF(ctx, "[Agent] Received %d processes to track / 收到 %d 个需要跟踪的进程", len(trackedProcesses), len(trackedProcesses))
+			logger.InfoF(ctx, "[Agent] Received %d processes to track (auto_monitor=%t, auto_restart=%t) / 收到 %d 个需要跟踪的进程（自动监控=%t，自动拉起=%t）",
+				len(trackedProcesses), autoMonitorEnabled, autoRestartEnabled, len(trackedProcesses), autoMonitorEnabled, autoRestartEnabled)
+
+			expected := make(map[string]struct{}, len(trackedProcesses))
+			for _, proc := range trackedProcesses {
+				expected[proc.Name] = struct{}{}
+			}
+			for _, existing := range a.processMonitor.GetAllTrackedProcesses() {
+				if _, ok := expected[existing.Name]; ok {
+					continue
+				}
+				a.processMonitor.UntrackProcessSilent(existing.Name)
+				logger.InfoF(ctx, "[Agent] Untracked stale monitored process: %s / 已移除过期受监控进程：%s", existing.Name, existing.Name)
+			}
+
 			for _, proc := range trackedProcesses {
 				// Create start params for potential restart / 创建启动参数用于可能的重启
 				startParams := &process.StartParams{
@@ -1807,16 +1920,15 @@ func (a *Agent) handleUpdateMonitorConfigCommand(ctx context.Context, cmd *pb.Co
 				}
 
 				if proc.PID > 0 {
-					// Track running process silently - no started event since process was already running
-					// 静默跟踪运行中的进程 - 不发送 started 事件，因为进程已经在运行
 					a.processMonitor.TrackProcessSilent(proc.Name, proc.PID, proc.InstallDir, proc.Role, startParams)
 					logger.InfoF(ctx, "[Agent] Tracking running process (silent): %s (PID: %d, Role: %s, Dir: %s) / 静默跟踪运行中的进程：%s（PID：%d，角色：%s，目录：%s）",
 						proc.Name, proc.PID, proc.Role, proc.InstallDir, proc.Name, proc.PID, proc.Role, proc.InstallDir)
-				} else {
-					// For stopped processes, register with PID 0 - auto-restart will start them if enabled
-					// 对于已停止的进程，用 PID 0 注册 - 如果启用了自动重启，会自动启动它们
+				} else if autoRestartEnabled {
 					a.processMonitor.TrackProcessSilent(proc.Name, 0, proc.InstallDir, proc.Role, startParams)
 					logger.InfoF(ctx, "[Agent] Registered stopped process (will auto-restart): %s (Role: %s, Dir: %s) / 注册已停止的进程（将自动重启）：%s（角色：%s，目录：%s）",
+						proc.Name, proc.Role, proc.InstallDir, proc.Name, proc.Role, proc.InstallDir)
+				} else {
+					logger.InfoF(ctx, "[Agent] Skip stopped process without auto-restart: %s (Role: %s, Dir: %s) / 自动拉起已禁用，跳过已停止进程：%s（角色：%s，目录：%s）",
 						proc.Name, proc.Role, proc.InstallDir, proc.Name, proc.Role, proc.InstallDir)
 				}
 			}

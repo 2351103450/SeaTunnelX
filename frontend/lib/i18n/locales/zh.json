@@ -271,6 +271,7 @@
     "hostManagement": "主机管理",
     "clusterManagement": "集群管理",
     "monitoringCenter": "告警中心",
+    "diagnosticsCenter": "诊断中心",
     "commandLogs": "命令记录",
     "auditLogs": "审计日志",
     "packageManagement": "安装包管理",
@@ -557,6 +558,7 @@
     "batchStopSuccess": "批量停止成功",
     "batchRestartSuccess": "批量重启成功",
     "batchRestartSuccessAutoRestart": "批量重启请求已提交，自动重启将托管启动过程",
+    "openDiagnostics": "诊断中心",
     "viewLogs": "查看日志",
     "noLogs": "暂无日志",
     "getLogsError": "获取日志失败",
@@ -1375,6 +1377,7 @@
       "eventTime": "事件时间",
       "lastSeenAt": "最近出现",
       "noAlerts": "暂无告警",
+      "openDiagnostics": "关联诊断",
       "ack": "确认",
       "silence30m": "静默30分钟",
       "loadError": "加载告警列表失败",
@@ -2191,6 +2194,257 @@
     "discoverMultiHostHint": "选择一个或多个已安装 Agent 的主机，点击自动发现按钮扫描各主机上运行的 SeaTunnel 集群节点",
     "discoverProcessesOnHosts": "自动发现节点 ({count} 台主机)",
     "processes": "个节点"
+  },
+  "diagnosticsCenter": {
+    "title": "诊断中心",
+    "subtitle": "先看问题线索，再做诊断检查，必要时继续抓现场并生成诊断报告。",
+    "workspaceTitle": "统一诊断工作台",
+    "loading": "加载诊断中心中...",
+    "loadError": "加载诊断中心失败",
+    "clearContext": "清除上下文",
+    "comingSoon": "{tab} 能力将在后续阶段逐步落地。",
+    "tabs": {
+      "errors": "问题线索",
+      "inspections": "诊断检查",
+      "tasks": "诊断执行"
+    },
+    "tabDescriptions": {
+      "errors": "按错误线索聚合历史异常，并进入后续排查。",
+      "inspections": "先做轻量检查，确认是否需要继续抓现场。",
+      "tasks": "查看诊断执行过程、诊断包和诊断报告。"
+    },
+    "status": {
+      "planned": "规划中"
+    },
+    "filters": {
+      "cluster": "按集群筛选",
+      "allClusters": "全部集群"
+    },
+    "context": {
+      "global": "当前为全局筛选",
+      "clusterScoped": "筛选集群：{name}",
+      "source": "进入来源：{source}",
+      "alert": "告警：{id}",
+      "goToCluster": "返回集群详情"
+    },
+    "boundaries": {
+      "title": "当前边界"
+    },
+    "errors": {
+      "title": "错误中心",
+      "globalHint": "按错误指纹聚合 Seatunnel ERROR，支持全局跨集群排查。",
+      "clusterScopedHint": "当前已按集群 {name} 预过滤错误组。",
+      "matchedGroups": "匹配错误组 {count} 个",
+      "keywordPlaceholder": "搜索错误摘要、异常类、来源文件",
+      "search": "搜索",
+      "groupListTitle": "错误组列表",
+      "detailTitle": "错误详情",
+      "loadGroupsError": "加载错误组失败",
+      "loadDetailError": "加载错误详情失败",
+      "empty": "当前筛选条件下暂无错误组。",
+      "selectGroup": "请选择左侧错误组查看样本事件与证据。",
+      "recentEventsTitle": "近期事件样本",
+      "evidenceTitle": "错误证据样本",
+      "noEvents": "暂无错误事件",
+      "noEvidence": "暂无错误证据",
+      "noSampleMessage": "暂无错误摘要",
+      "previous": "上一页",
+      "next": "下一页",
+      "pageSummary": "第 {page}/{totalPages} 页",
+      "columns": {
+        "group": "错误组",
+        "exception": "异常类",
+        "occurrences": "出现次数",
+        "lastSeen": "最近出现",
+        "time": "时间",
+        "job": "Job",
+        "source": "来源文件"
+      }
+    },
+    "inspections": {
+      "title": "诊断检查",
+      "globalHint": "请选择一个受管集群，先做一次轻量检查，再决定是否继续抓现场证据。",
+      "clusterScopedHint": "当前已按集群 {name} 过滤检查记录。",
+      "matchedReports": "匹配巡检报告 {count} 条",
+      "startInspection": "立即巡检",
+      "startSuccess": "巡检已完成，已打开最新报告。",
+      "startError": "发起巡检失败",
+      "lookbackLabel": "巡检时间范围（分钟）",
+      "lookbackHint": "仅对本次新发起的巡检生效：只统计最近 N 分钟内的错误事件与进程异常，避免把已修复的历史问题重新算入巡检结果。",
+      "lookbackValue": "最近 {minutes} 分钟",
+      "lookbackRangeError": "巡检时间范围必须在 5 到 1440 分钟之间",
+      "loadReportsError": "加载巡检报告失败",
+      "loadDetailError": "加载巡检详情失败",
+      "listTitle": "检查记录",
+      "detailTitle": "检查结果",
+      "empty": "当前筛选条件下暂无巡检报告。",
+      "selectReport": "请选择左侧巡检报告查看本次发现项。",
+      "summaryFallback": "本次巡检暂无摘要。",
+      "requestedBy": "发起人",
+      "startedAt": "开始时间",
+      "finishedAt": "完成时间",
+      "countSummary": "发现摘要",
+      "counts": "共 {total} 项（严重 {critical} / 告警 {warning} / 信息 {info}）",
+      "findingsTitle": "发现的问题",
+      "noFindings": "当前巡检没有结构化发现项。",
+      "filters": {
+        "status": "按状态筛选",
+        "allStatuses": "全部状态",
+        "severity": "按严重级别筛选",
+        "allSeverities": "全部级别"
+      },
+      "status": {
+        "pending": "待执行",
+        "running": "执行中",
+        "completed": "已完成",
+        "failed": "失败"
+      },
+      "severity": {
+        "critical": "严重",
+        "warning": "告警",
+        "info": "信息"
+      },
+      "trigger": {
+        "manual": "手动发起",
+        "cluster_detail": "集群详情",
+        "diagnostics_workspace": "诊断中心"
+      },
+      "actions": {
+        "viewError": "查看关联错误",
+        "createTask": "查看更多诊断选项",
+        "useForDiagnosis": "用这项继续排查",
+        "selectedForDiagnosis": "当前正在围绕这项排查"
+      },
+      "followUp": {
+        "title": "继续诊断",
+        "hasFindingsDescription": "本次检查已经发现异常。你可以直接继续抓现场证据，系统会生成诊断包和诊断报告。",
+        "currentFinding": "当前准备继续排查的问题",
+        "createTask": "继续生成诊断包和报告",
+        "dismiss": "先只看检查结果",
+        "hasFindingsHint": "这一步会立即开始采集日志样本、线程栈等现场证据；如果现场已经变化，报告里也会明确区分“历史异常”和“当前现场”。",
+        "noFindingsTitle": "本次检查未发现需要继续排查的问题",
+        "noFindingsDescription": "当前没有需要继续抓现场的异常项，可以直接把本次检查结果当作轻量诊断结论查看。",
+        "dismissedTitle": "你已选择先查看检查结果",
+        "dismissedDescription": "如果后续还想继续抓现场证据，可随时恢复并继续生成诊断包和报告。",
+        "resume": "恢复继续诊断",
+        "chooseFindingFirst": "请先选择一个要继续排查的问题",
+        "createTaskSuccess": "已开始继续诊断，正在生成诊断包和报告",
+        "createTaskError": "继续诊断失败"
+      }
+    },
+    "tasks": {
+      "title": "诊断执行",
+      "globalHint": "你可以手动开始一次诊断，或从错误、巡检异常、告警等问题线索继续排查。",
+      "clusterScopedHint": "当前按集群 {name} 过滤诊断记录；你也可以围绕该集群继续排查。",
+      "matchedTasks": "匹配任务 {count} 条",
+      "listTitle": "任务列表",
+      "detailTitle": "任务执行详情",
+      "summaryFallback": "该诊断任务暂无摘要。",
+      "progress": "执行进度",
+      "currentStep": "当前步骤",
+      "createdBy": "创建人",
+      "createdAt": "创建时间",
+      "startedAt": "开始时间",
+      "completedAt": "完成时间",
+      "bundleDir": "诊断包目录",
+      "manifestPath": "Manifest 路径",
+      "indexPath": "诊断报告路径",
+      "clusterLabel": "集群",
+      "hostIP": "主机 IP",
+      "stepsTitle": "步骤执行",
+      "nodesTitle": "节点执行",
+      "logsTitle": "执行日志",
+      "logCount": "日志 {count} 条",
+      "loadTasksError": "加载诊断任务列表失败",
+      "loadDetailError": "加载诊断任务详情失败",
+      "loadLogsError": "加载诊断任务日志失败",
+      "createTask": "创建诊断任务",
+      "createSuccess": "诊断任务已创建",
+      "createError": "创建诊断任务失败",
+      "startTask": "开始执行",
+      "retryTask": "重新执行",
+      "startSuccess": "诊断任务已启动",
+      "startError": "启动诊断任务失败",
+      "chooseClusterFirst": "请先选择目标集群",
+      "selectTask": "请选择左侧诊断任务查看实时步骤、节点状态与日志。",
+      "empty": "当前筛选条件下暂无诊断任务。",
+      "noSteps": "该任务当前还没有步骤记录。",
+      "noNodes": "该任务当前还没有节点执行记录。",
+      "noLogs": "当前筛选条件下暂无执行日志。",
+      "includeThreadDump": "线程栈采集",
+      "includeThreadDumpHint": "默认建议开启，便于快速定位线程阻塞与死锁。",
+      "includeJVMDump": "JVM Dump 采集",
+      "includeJVMDumpHint": "体积较大，执行前会校验目标节点磁盘空间。",
+      "logSampleLines": "日志样本行数",
+      "jvmDumpMinFreeMB": "JVM Dump 最低剩余空间 (MB)",
+      "autoStart": "创建后自动启动",
+      "createContext": {
+        "manual": "将围绕当前选中的集群做一次通用诊断，适合先抓一份基础现场。",
+        "error_group": "将围绕这组历史错误继续排查，并自动关联最近受影响的节点与错误证据。",
+        "inspection_finding": "将围绕这条巡检异常继续排查，并自动带入对应的巡检报告与异常项。",
+        "alert": "将围绕这条告警继续排查，并自动补充告警快照与集群现场证据。"
+      },
+      "source": {
+        "manual": "手动开始",
+        "error_group": "围绕错误继续",
+        "inspection_finding": "围绕巡检异常继续",
+        "alert": "围绕告警继续"
+      },
+      "sourceRefs": {
+        "errorGroup": "错误线索 #{id}",
+        "report": "巡检报告 #{id}",
+        "finding": "巡检异常 #{id}",
+        "alert": "告警线索 {id}"
+      },
+      "filters": {
+        "status": "按状态筛选",
+        "allStatuses": "全部状态"
+      },
+      "status": {
+        "pending": "待执行",
+        "ready": "就绪",
+        "running": "执行中",
+        "succeeded": "成功",
+        "failed": "失败",
+        "skipped": "已跳过",
+        "cancelled": "已取消"
+      },
+      "streaming": {
+        "connected": "实时流已连接",
+        "polling": "轮询兜底"
+      },
+      "logFilters": {
+        "step": "按步骤过滤",
+        "allSteps": "全部步骤",
+        "node": "按节点过滤",
+        "allNodes": "全部节点",
+        "level": "按级别过滤",
+        "allLevels": "全部级别"
+      },
+      "previewHTML": "预览诊断报告",
+      "downloadHTML": "下载诊断报告",
+      "downloadBundle": "下载诊断包",
+      "triggerSourceLabel": "触发来源",
+      "triggerSourcePlaceholder": "选择本次诊断任务的触发来源",
+      "triggerSourceHint": "系统会记录任务来源；你可以在这里决定本次诊断的依据。",
+      "clearPrefill": "清除预填依据",
+      "prefillAvailableHint": "当前页面还保留了从上一页带入的问题线索；如果你想重新围绕它排查，可在上方切换回来。",
+      "entrySourceLabel": "进入来源：{source}",
+      "entrySource": {
+        "alerts": "告警中心",
+        "inspectionFinding": "巡检异常",
+        "clusterDetail": "集群详情",
+        "clusterDetailSummary": "集群摘要"
+      },
+      "createModeLabel": "创建方式",
+      "createModePlaceholder": "选择这次怎么开始诊断",
+      "createModeHint": "这里决定本次诊断是手动开始，还是围绕某个问题继续排查。",
+      "manualOnlyHint": "当前没有带入错误、巡检异常或告警线索，所以这里只能手动开始。若想直接围绕某个问题排查，请从对应页面进入。",
+      "switchToManual": "改为手动开始",
+      "entryRouteLabel": "进入方式：{source}",
+      "diagnosisBasisLabel": "问题线索",
+      "noDiagnosisBasis": "当前没有带入具体问题线索，本次会围绕所选集群做一次通用诊断。"
+    }
   },
   "stUpgrade": {
     "entry": "升级",

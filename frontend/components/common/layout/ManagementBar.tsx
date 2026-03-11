@@ -23,6 +23,7 @@ import {FloatingDock} from '@/components/ui/floating-dock';
 import {
   Activity,
   BarChartIcon,
+  Bug,
   User,
   LogOutIcon,
   Globe,
@@ -73,6 +74,7 @@ const StaticIcons = {
   puzzle: <Puzzle {...IconOptions} />,
   dashboard: <LayoutDashboard {...IconOptions} />,
   monitoring: <Activity {...IconOptions} />,
+  diagnostics: <Bug {...IconOptions} />,
   divider: <div />,
 };
 
@@ -420,6 +422,13 @@ export function ManagementBar() {
       title: tDock('monitoringCenter'),
       icon: StaticIcons.monitoring,
       href: '/monitoring',
+    });
+
+    // 诊断中心入口 / Diagnostics center entry
+    items.push({
+      title: tDock('diagnosticsCenter'),
+      icon: StaticIcons.diagnostics,
+      href: '/diagnostics',
     });
 
     // 安装包管理入口 / Package management entry

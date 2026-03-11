@@ -69,6 +69,7 @@ import {
   RefreshCw,
   Server,
   Activity,
+  Bug,
   Loader2,
   FileText,
 } from 'lucide-react';
@@ -84,6 +85,7 @@ import {
   HealthStatus,
 } from '@/lib/services/cluster/types';
 import type {UpgradeTaskSummary} from '@/lib/services/st-upgrade';
+import type {DiagnosticsErrorGroup} from '@/lib/services/diagnostics';
 import {
   getExecutionStatusLabel,
   getStatusBadgeVariant as getUpgradeStatusBadgeVariant,
@@ -185,6 +187,10 @@ export function ClusterDetail({clusterId}: ClusterDetailProps) {
   const [upgradeTasksTotal, setUpgradeTasksTotal] = useState(0);
   const [upgradeTasksPage, setUpgradeTasksPage] = useState(1);
   const [upgradeTasksPageSize] = useState(10);
+  const [diagnosticsGroups, setDiagnosticsGroups] = useState<DiagnosticsErrorGroup[]>([]);
+  const [diagnosticsGroupTotal, setDiagnosticsGroupTotal] = useState(0);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [inspectionStarting, setInspectionStarting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isOperating, setIsOperating] = useState(false);
 
@@ -256,6 +262,48 @@ export function ClusterDetail({clusterId}: ClusterDetailProps) {
     }
   }, [clusterId, t]);
 
+  const loadDiagnosticsSummary = useCallback(async () => {
+    setDiagnosticsLoading(true);
+    try {
+      const result = await services.diagnostics.getErrorGroupsSafe({
+        cluster_id: clusterId,
+        page: 1,
+        page_size: 5,
+      });
+      if (!result.success || !result.data) {
+        setDiagnosticsGroups([]);
+        setDiagnosticsGroupTotal(0);
+        return;
+      }
+      setDiagnosticsGroups(result.data.items || []);
+      setDiagnosticsGroupTotal(result.data.total || 0);
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  }, [clusterId]);
+
+  const handleStartInspection = useCallback(async () => {
+    setInspectionStarting(true);
+    try {
+      const result = await services.diagnostics.startInspectionSafe({
+        cluster_id: clusterId,
+        trigger_source: 'cluster_detail',
+      });
+      if (!result.success || !result.data?.report) {
+        toast.error(
+          result.error || t('diagnosticsCenter.inspections.startError'),
+        );
+        return;
+      }
+      toast.success(t('diagnosticsCenter.inspections.startSuccess'));
+      router.push(
+        `/diagnostics?tab=inspections&cluster_id=${clusterId}&report_id=${result.data.report.id}&source=cluster-detail`,
+      );
+    } finally {
+      setInspectionStarting(false);
+    }
+  }, [clusterId, router, t]);
+
   /**
    * Load upgrade task history
    * 加载升级任务记录
@@ -290,7 +338,8 @@ export function ClusterDetail({clusterId}: ClusterDetailProps) {
 
   useEffect(() => {
     void loadClusterData();
-  }, [loadClusterData]);
+    void loadDiagnosticsSummary();
+  }, [loadClusterData, loadDiagnosticsSummary]);
 
   useEffect(() => {
     void loadUpgradeTasks(upgradeTasksPage, upgradeTasksPageSize);
@@ -307,9 +356,11 @@ export function ClusterDetail({clusterId}: ClusterDetailProps) {
 
   const handleRefresh = useCallback(() => {
     void loadClusterData();
+    void loadDiagnosticsSummary();
     void loadUpgradeTasks(upgradeTasksPage, upgradeTasksPageSize);
   }, [
     loadClusterData,
+    loadDiagnosticsSummary,
     loadUpgradeTasks,
     upgradeTasksPage,
     upgradeTasksPageSize,
@@ -850,6 +901,17 @@ export function ClusterDetail({clusterId}: ClusterDetailProps) {
           <Button
             variant='outline'
             onClick={() =>
+              router.push(
+                `/diagnostics?tab=errors&cluster_id=${clusterId}&source=cluster-detail`,
+              )
+            }
+          >
+            <Bug className='h-4 w-4 mr-2' />
+            {t('cluster.openDiagnostics')}
+          </Button>
+          <Button
+            variant='outline'
+            onClick={() =>
               router.push(`/clusters/${clusterId}/upgrade/prepare`)
             }
           >
@@ -1292,6 +1354,101 @@ export function ClusterDetail({clusterId}: ClusterDetailProps) {
       {/* Monitor Config / 监控配置 */}
       <motion.div variants={itemVariants}>
         <MonitorConfigPanel clusterId={clusterId} clusterName={cluster.name} />
+      </motion.div>
+
+      {/* Diagnostics Summary / 诊断摘要 */}
+      <motion.div variants={itemVariants}>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0'>
+            <div>
+              <CardTitle>{t('diagnosticsCenter.errors.title')}</CardTitle>
+              <CardDescription>
+                {t('diagnosticsCenter.errors.clusterScopedHint', {name: cluster.name})}
+              </CardDescription>
+            </div>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Button
+                onClick={() => void handleStartInspection()}
+                disabled={inspectionStarting}
+              >
+                {inspectionStarting ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : (
+                  <Activity className='mr-2 h-4 w-4' />
+                )}
+                {t('diagnosticsCenter.inspections.startInspection')}
+              </Button>
+              <Button
+                variant='outline'
+                onClick={() =>
+                  router.push(
+                    `/diagnostics?tab=errors&cluster_id=${clusterId}&source=cluster-detail-summary`,
+                  )
+                }
+              >
+                <Bug className='h-4 w-4 mr-2' />
+                {t('cluster.openDiagnostics')}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Badge variant='outline'>
+                {t('diagnosticsCenter.errors.matchedGroups', {
+                  count: diagnosticsGroupTotal,
+                })}
+              </Badge>
+            </div>
+            {diagnosticsLoading ? (
+              <div className='space-y-2'>
+                <div className='h-10 rounded-md bg-muted/60' />
+                <div className='h-10 rounded-md bg-muted/60' />
+                <div className='h-10 rounded-md bg-muted/60' />
+              </div>
+            ) : diagnosticsGroups.length === 0 ? (
+              <div className='rounded-lg border border-dashed p-4 text-sm text-muted-foreground'>
+                {t('diagnosticsCenter.errors.empty')}
+              </div>
+            ) : (
+              <div className='space-y-3'>
+                {diagnosticsGroups.map((group) => (
+                  <button
+                    key={group.id}
+                    type='button'
+                    className='flex w-full items-start justify-between rounded-lg border p-3 text-left transition-colors hover:bg-muted/30'
+                    onClick={() =>
+                      router.push(
+                        `/diagnostics?tab=errors&cluster_id=${clusterId}&group_id=${group.id}&source=cluster-detail-summary`,
+                      )
+                    }
+                  >
+                    <div className='min-w-0 space-y-1'>
+                      <div className='truncate font-medium'>
+                        {group.title || group.sample_message || group.fingerprint}
+                      </div>
+                      <div className='truncate text-sm text-muted-foreground'>
+                        {group.exception_class || group.sample_message || '-'}
+                      </div>
+                    </div>
+                    <div className='ml-4 flex shrink-0 items-center gap-2'>
+                      <Badge
+                        variant={
+                          group.occurrence_count >= 10
+                            ? 'destructive'
+                            : group.occurrence_count >= 3
+                              ? 'secondary'
+                              : 'outline'
+                        }
+                      >
+                        {group.occurrence_count}
+                      </Badge>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </motion.div>
 
       {/* Process Events / 进程事件 */}

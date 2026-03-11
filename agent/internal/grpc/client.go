@@ -491,6 +491,52 @@ func (c *Client) GetLastHeartbeat() time.Time {
 	return c.lastHeartbeat
 }
 
+// SendLogEntries sends a batch of log entries to Control Plane through LogStream.
+// SendLogEntries 通过 LogStream 向 Control Plane 发送一批日志条目。
+func (c *Client) SendLogEntries(ctx context.Context, entries []*pb.LogEntry) error {
+	c.mu.RLock()
+	client := c.client
+	agentID := c.agentID
+	c.mu.RUnlock()
+
+	if client == nil {
+		return errors.New("client not connected")
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	stream, err := client.LogStream(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create log stream: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		if entry.AgentId == "" {
+			entry.AgentId = agentID
+		}
+		if entry.Timestamp <= 0 {
+			entry.Timestamp = time.Now().UnixMilli()
+		}
+		if err := stream.Send(entry); err != nil {
+			return fmt.Errorf("failed to send log entry: %w", err)
+		}
+	}
+
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return fmt.Errorf("failed to close log stream: %w", err)
+	}
+	if !resp.Success {
+		return errors.New("control plane rejected log entries")
+	}
+
+	return nil
+}
+
 // StartCommandStream starts the bidirectional command stream
 // StartCommandStream 启动双向指令流
 func (c *Client) StartCommandStream(ctx context.Context, handler CommandHandler) error {

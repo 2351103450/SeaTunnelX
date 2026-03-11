@@ -18,6 +18,7 @@
 'use client';
 
 import {useCallback, useEffect, useMemo, useState} from 'react';
+import Link from 'next/link';
 import {useSearchParams} from 'next/navigation';
 import {useTranslations} from 'next-intl';
 import {RefreshCw} from 'lucide-react';
@@ -124,6 +125,18 @@ function isSilenceActive(value?: string | null): boolean {
 
 function resolveLastChangedAt(alert: AlertInstance): string | null {
   return alert.closed_at || alert.resolved_at || alert.last_seen_at || null;
+}
+
+function buildDiagnosticsHref(alert: AlertInstance): string {
+  const params = new URLSearchParams({
+    tab: 'errors',
+    source: 'alerts',
+    alert_id: alert.alert_id,
+  });
+  if (alert.cluster_id) {
+    params.set('cluster_id', alert.cluster_id);
+  }
+  return `/diagnostics?${params.toString()}`;
 }
 
 export function MonitoringAlertsCenter() {
@@ -554,6 +567,11 @@ export function MonitoringAlertsCenter() {
                       </TableCell>
                       <TableCell>
                         <div className='flex flex-wrap gap-2'>
+                          <Button asChild size='sm' variant='outline'>
+                            <Link href={buildDiagnosticsHref(alert)}>
+                              {t('alerts.openDiagnostics')}
+                            </Link>
+                          </Button>
                           <span title={silenceHint}>
                             <Button
                               size='sm'
