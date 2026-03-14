@@ -32,6 +32,7 @@ import (
 	"github.com/seatunnel/seatunnelX/internal/apps/diagnostics"
 	"github.com/seatunnel/seatunnelX/internal/apps/host"
 	"github.com/seatunnel/seatunnelX/internal/apps/monitor"
+	"github.com/seatunnel/seatunnelX/internal/db"
 	pb "github.com/seatunnel/seatunnelX/internal/proto/agent"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -149,6 +150,45 @@ func (s *Server) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.Reg
 	}
 
 	return response, nil
+}
+
+// GetDiagnosticsLogCursors returns all diagnostics log cursors for a given agent.
+// GetDiagnosticsLogCursors 返回某个 Agent 的所有诊断日志游标。
+func (s *Server) GetDiagnosticsLogCursors(ctx context.Context, req *pb.DiagnosticsCursorRequest) (*pb.DiagnosticsCursorResponse, error) {
+	if req == nil || req.AgentId == "" {
+		return &pb.DiagnosticsCursorResponse{}, nil
+	}
+	if !db.IsDatabaseInitialized() {
+		return &pb.DiagnosticsCursorResponse{}, nil
+	}
+
+	// Lazily construct diagnostics repository; this RPC is infrequent and read-only.
+	repo := diagnostics.NewRepository(db.DB(ctx))
+	cursors, err := repo.ListLogCursorsByAgent(ctx, req.AgentId)
+	if err != nil {
+		s.logger.Error("GetDiagnosticsLogCursors failed",
+			zap.String("agent_id", req.AgentId),
+			zap.Error(err),
+		)
+		return nil, status.Errorf(codes.Internal, "failed to list log cursors: %v", err)
+	}
+
+	resp := &pb.DiagnosticsCursorResponse{
+		Cursors: make([]*pb.DiagnosticsCursor, 0, len(cursors)),
+	}
+	for _, c := range cursors {
+		item := &pb.DiagnosticsCursor{
+			InstallDir: c.InstallDir,
+			Role:       c.Role,
+			SourceFile: c.SourceFile,
+			Offset:     c.CursorOffset,
+		}
+		if c.LastOccurredAt != nil {
+			item.LastOccurredAt = c.LastOccurredAt.UnixMilli()
+		}
+		resp.Cursors = append(resp.Cursors, item)
+	}
+	return resp, nil
 }
 
 // Heartbeat handles Agent heartbeat requests.
