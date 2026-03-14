@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -152,6 +153,24 @@ type Client struct {
 	lastHeartbeat   time.Time                                                       // 最后心跳时间
 	cmdStream       grpc.BidiStreamingClient[pb.CommandResponse, pb.CommandRequest] // 命令流
 	cmdStreamMu     sync.Mutex                                                      // 命令流锁
+}
+
+// GetDiagnosticsLogCursors fetches diagnostics log cursors from Control Plane.
+// GetDiagnosticsLogCursors 从 Control Plane 拉取诊断日志游标。
+func (c *Client) GetDiagnosticsLogCursors(ctx context.Context) (*pb.DiagnosticsCursorResponse, error) {
+	c.mu.RLock()
+	client := c.client
+	agentID := c.agentID
+	c.mu.RUnlock()
+
+	if client == nil {
+		return nil, errors.New("client not connected")
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return &pb.DiagnosticsCursorResponse{}, nil
+	}
+	return client.GetDiagnosticsLogCursors(ctx, &pb.DiagnosticsCursorRequest{AgentId: agentID})
 }
 
 // NewClient creates a new gRPC client

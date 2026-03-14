@@ -110,6 +110,24 @@ func NewCollector(sender LogSender) *Collector {
 	}
 }
 
+// SetInitialCursor sets an initial cursor offset for a given file cursor key.
+// SetInitialCursor 为指定游标 key 设置初始偏移量（用于 Agent 启动时对齐服务端游标）。
+func (c *Collector) SetInitialCursor(key string, offset int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if offset < 0 {
+		offset = 0
+	}
+	cursor := c.cursors[key]
+	if cursor == nil {
+		cursor = &fileCursor{}
+		c.cursors[key] = cursor
+	}
+	cursor.Offset = offset
+	cursor.Initialized = true
+}
+
 // ReplaceTargets replaces the current managed runtime targets.
 // ReplaceTargets 替换当前受管运行目标列表。
 func (c *Collector) ReplaceTargets(targets []*ScanTarget) {
@@ -223,6 +241,7 @@ func (c *Collector) collectTargetEntries(ctx context.Context, target *ScanTarget
 	if err != nil {
 		return nil, nil, err
 	}
+	files = filterLogFilesByRole(files, target.Role)
 
 	entries := make([]*pb.LogEntry, 0)
 	updates := make(map[string]int64)
@@ -303,6 +322,46 @@ func (c *Collector) collectTargetEntries(ctx context.Context, target *ScanTarget
 	}
 
 	return entries, updates, nil
+}
+
+func filterLogFilesByRole(files []string, role string) []string {
+	role = strings.ToLower(strings.TrimSpace(role))
+	if len(files) == 0 || role == "" || role == "hybrid" || role == "master/worker" || role == "master_worker" {
+		return files
+	}
+
+	// On hybrid deployment, master and worker may be on the same host and share the same installDir/logs.
+	// If we scan all `seatunnel-engine-*.log` for each role target, we will duplicate the same evidence.
+	// Filter engine logs by role to keep one-to-one mapping between target role and log file(s).
+	result := make([]string, 0, len(files))
+	for _, filePath := range files {
+		base := strings.ToLower(filepath.Base(strings.TrimSpace(filePath)))
+
+		// job-*.log is usually produced by worker execution.
+		if strings.HasPrefix(base, "job-") {
+			if role == "worker" {
+				result = append(result, filePath)
+			}
+			continue
+		}
+
+		if strings.Contains(base, "seatunnel-engine-master") || strings.Contains(base, "engine-master") || strings.Contains(base, "master.log") {
+			if role == "master" {
+				result = append(result, filePath)
+			}
+			continue
+		}
+		if strings.Contains(base, "seatunnel-engine-worker") || strings.Contains(base, "engine-worker") || strings.Contains(base, "worker.log") {
+			if role == "worker" {
+				result = append(result, filePath)
+			}
+			continue
+		}
+
+		// Unknown engine log name: keep it for safety (better some noise than missing evidence).
+		result = append(result, filePath)
+	}
+	return result
 }
 
 func (c *Collector) collectRotatedGapEntries(ctx context.Context, target *ScanTarget, activeFilePath string, previousOffset int64) ([]*pb.LogEntry, map[string]int64, error) {

@@ -474,6 +474,30 @@ func (a *Agent) registerWithControlPlane() error {
 
 	logger.InfoF(ctx, "Registered successfully with ID: %s / 注册成功，ID：%s", resp.AssignedId, resp.AssignedId)
 
+	// Align diagnostics collector cursor with server-side persisted cursor.
+	// 对齐诊断采集器游标，避免 Agent 重启后按 initialTail 回采导致重复上报。
+	if a.errorCollector != nil {
+		if cursors, err := a.grpcClient.GetDiagnosticsLogCursors(ctx); err != nil {
+			logger.WarnF(ctx, "[Diagnostics] Failed to load diagnostics cursors: %v / 拉取诊断游标失败：%v", err, err)
+		} else if cursors != nil {
+			loaded := 0
+			for _, item := range cursors.Cursors {
+				if item == nil {
+					continue
+				}
+				key := strings.TrimSpace(item.InstallDir) + "::" + strings.TrimSpace(item.Role) + "::" + strings.TrimSpace(item.SourceFile)
+				if strings.TrimSpace(item.SourceFile) == "" || strings.TrimSpace(item.InstallDir) == "" || strings.TrimSpace(item.Role) == "" {
+					continue
+				}
+				a.errorCollector.SetInitialCursor(key, item.Offset)
+				loaded++
+			}
+			if loaded > 0 {
+				logger.InfoF(ctx, "[Diagnostics] Loaded %d diagnostics cursors / 已加载 %d 条诊断游标", loaded, loaded)
+			}
+		}
+	}
+
 	// Set up event reporter with gRPC report function / 设置事件上报器的 gRPC 上报函数
 	a.setupEventReporter()
 
