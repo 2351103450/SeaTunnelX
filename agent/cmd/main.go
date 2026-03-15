@@ -35,6 +35,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -376,16 +377,7 @@ func (a *Agent) reportProcessEvent(event *monitor.ProcessEvent) {
 		eventType = pb.ProcessEventType_PROCESS_RESTART_FAILED
 	}
 
-	installDir := ""
-	role := ""
-	if event.Details != nil {
-		if dir, ok := event.Details["install_dir"].(string); ok {
-			installDir = dir
-		}
-		if r, ok := event.Details["role"].(string); ok {
-			role = r
-		}
-	}
+	installDir, role, details := extractProcessEventReportFields(event)
 
 	report := &pb.ProcessEventReport{
 		AgentId:     a.grpcClient.GetAgentID(),
@@ -395,6 +387,7 @@ func (a *Agent) reportProcessEvent(event *monitor.ProcessEvent) {
 		InstallDir:  installDir,
 		Role:        role,
 		Timestamp:   event.Timestamp.UnixMilli(),
+		Details:     details,
 	}
 
 	if err := a.grpcClient.ReportProcessEvent(a.ctx, report); err != nil {
@@ -405,6 +398,23 @@ func (a *Agent) reportProcessEvent(event *monitor.ProcessEvent) {
 
 	logger.InfoF(ctx, "[Agent] Event reported to Control Plane: type=%s, name=%s, pid=%d / 事件已上报到 Control Plane：类型=%s，名称=%s，PID=%d",
 		event.Type, event.Name, event.PID, event.Type, event.Name, event.PID)
+}
+
+func extractProcessEventReportFields(event *monitor.ProcessEvent) (installDir, role string, details map[string]string) {
+	details = make(map[string]string)
+	if event == nil || event.Details == nil {
+		return "", "", details
+	}
+	for key, value := range event.Details {
+		details[key] = fmt.Sprint(value)
+	}
+	if dir, ok := event.Details["install_dir"].(string); ok {
+		installDir = dir
+	}
+	if r, ok := event.Details["role"].(string); ok {
+		role = r
+	}
+	return installDir, role, details
 }
 
 // connectToControlPlane establishes connection to Control Plane with retry
@@ -536,16 +546,7 @@ func (a *Agent) setupEventReporter() {
 				eventType = pb.ProcessEventType_PROCESS_RESTART_FAILED
 			}
 
-			installDir := ""
-			role := ""
-			if event.Details != nil {
-				if dir, ok := event.Details["install_dir"].(string); ok {
-					installDir = dir
-				}
-				if r, ok := event.Details["role"].(string); ok {
-					role = r
-				}
-			}
+			installDir, role, details := extractProcessEventReportFields(event)
 
 			report := &pb.ProcessEventReport{
 				AgentId:     agentID,
@@ -555,6 +556,7 @@ func (a *Agent) setupEventReporter() {
 				InstallDir:  installDir,
 				Role:        role,
 				Timestamp:   event.Timestamp.UnixMilli(),
+				Details:     details,
 			}
 
 			if err := a.grpcClient.ReportProcessEvent(a.ctx, report); err != nil {
@@ -1302,7 +1304,7 @@ func (a *Agent) handleCollectLogsCommand(ctx context.Context, cmd *pb.CommandReq
 	}
 
 	// mode: "tail" (default), "head", "all"
-	// mode: "tail"（默认）, "head", "all"
+	// mode: "tail"（默认）, "head", "all", "list"
 	mode := getParamString(cmd.Parameters, "mode", "tail")
 
 	// filter: grep pattern (optional)
@@ -1342,14 +1344,70 @@ func (a *Agent) handleCollectLogsCommand(ctx context.Context, cmd *pb.CommandReq
 		}
 	}
 
+	fileInfo, statErr := os.Stat(actualLogFile)
 	// Check if file exists / 检查文件是否存在
-	if _, err := os.Stat(actualLogFile); os.IsNotExist(err) {
+	if os.IsNotExist(statErr) {
 		// List available log files / 列出可用的日志文件
 		dir := filepath.Dir(logFile)
 		base := filepath.Base(logFile)
 		files, _ := filepath.Glob(filepath.Join(dir, base+"*"))
 		availableFiles := strings.Join(files, ", ")
 		return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Log file not found: %s. Available files: %s / 日志文件不存在: %s。可用文件: %s", actualLogFile, availableFiles, actualLogFile, availableFiles)), nil
+	}
+	if statErr != nil {
+		return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to stat file: %v / 文件状态获取失败: %v", statErr, statErr)), nil
+	}
+
+	if mode == "list" {
+		if !fileInfo.IsDir() {
+			return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Path is not a directory: %s / 路径不是目录: %s", actualLogFile, actualLogFile)), nil
+		}
+		type directoryEntry struct {
+			Name    string    `json:"name"`
+			Path    string    `json:"path"`
+			Size    int64     `json:"size"`
+			Mode    string    `json:"mode"`
+			ModTime time.Time `json:"mod_time"`
+			IsDir   bool      `json:"is_dir"`
+		}
+		type directoryListing struct {
+			Path    string           `json:"path"`
+			Entries []directoryEntry `json:"entries"`
+		}
+		entries, err := os.ReadDir(actualLogFile)
+		if err != nil {
+			return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to list directory: %v / 目录读取失败: %v", err, err)), nil
+		}
+		items := make([]directoryEntry, 0, len(entries))
+		for _, entry := range entries {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			items = append(items, directoryEntry{
+				Name:    entry.Name(),
+				Path:    filepath.Join(actualLogFile, entry.Name()),
+				Size:    info.Size(),
+				Mode:    info.Mode().String(),
+				ModTime: info.ModTime(),
+				IsDir:   info.IsDir(),
+			})
+		}
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].IsDir != items[j].IsDir {
+				return !items[i].IsDir
+			}
+			return items[i].Name < items[j].Name
+		})
+		payload, err := json.Marshal(directoryListing{
+			Path:    actualLogFile,
+			Entries: items,
+		})
+		if err != nil {
+			return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to encode directory listing: %v / 目录列表编码失败: %v", err, err)), nil
+		}
+		reporter.Report(100, "Directory listed successfully / 目录读取成功")
+		return executor.CreateSuccessResponse(cmd.CommandId, string(payload)), nil
 	}
 
 	var output []byte

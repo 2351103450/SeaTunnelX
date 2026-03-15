@@ -41,3 +41,58 @@ func TestBuildErrorFingerprintGroupsDeadlineExceededVariants(t *testing.T) {
 		t.Fatalf("expected same normalized text for deadline exceeded variants")
 	}
 }
+
+func TestBuildErrorFingerprintIgnoresWrapperNoiseAndUsesRealException(t *testing.T) {
+	message := "Fatal Error,"
+	evidence := "" +
+		"===============================================================================\n" +
+		"Fatal Error,\n" +
+		"Please submit bug report in https://github.com/apache/seatunnel/issues\n" +
+		"Reason:SeaTunnel job executed failed\n" +
+		"Exception StackTrace:org.apache.seatunnel.core.starter.exception.CommandExecuteException: SeaTunnel job executed failed\n" +
+		"\tat org.apache.seatunnel.core.starter.seatunnel.command.ClientExecuteCommand.execute(ClientExecuteCommand.java:228)\n" +
+		"Caused by: java.lang.OutOfMemoryError: Java heap space\n"
+
+	fp, normalized, exceptionClass, title := BuildErrorFingerprint(message, evidence)
+	if fp == "" {
+		t.Fatal("expected fingerprint for wrapped exception evidence")
+	}
+	if exceptionClass != "java.lang.OutOfMemoryError" {
+		t.Fatalf("expected root exception class, got %q", exceptionClass)
+	}
+	if title != "java.lang.OutOfMemoryError: Java heap space" {
+		t.Fatalf("unexpected title %q", title)
+	}
+	if normalized == "" {
+		t.Fatal("expected normalized text")
+	}
+}
+
+func TestBuildErrorFingerprintReturnsEmptyForNoiseOnlyEvidence(t *testing.T) {
+	message := "Fatal Error,"
+	evidence := "" +
+		"===============================================================================\n" +
+		"Fatal Error,\n" +
+		"Please submit bug report in https://github.com/apache/seatunnel/issues\n" +
+		"Reason:SeaTunnel job executed failed\n"
+
+	fp, normalized, exceptionClass, title := BuildErrorFingerprint(message, evidence)
+	if fp != "" || normalized != "" || exceptionClass != "" || title != "" {
+		t.Fatalf("expected noise-only evidence to be ignored, got fp=%q normalized=%q exception=%q title=%q", fp, normalized, exceptionClass, title)
+	}
+}
+
+func TestBuildErrorFingerprintReturnsEmptyForNoiseOnlyEvidenceWithSeatunnelLogHeader(t *testing.T) {
+	message := "Fatal Error,"
+	evidence := "" +
+		"[] 2026-03-15 00:33:22,900 ERROR [o.a.s.c.s.SeaTunnel           ] [main] - Fatal Error,\n" +
+		"===============================================================================\n" +
+		"Fatal Error,\n" +
+		"Please submit bug report in https://github.com/apache/seatunnel/issues\n" +
+		"Reason:SeaTunnel job executed failed\n"
+
+	fp, normalized, exceptionClass, title := BuildErrorFingerprint(message, evidence)
+	if fp != "" || normalized != "" || exceptionClass != "" || title != "" {
+		t.Fatalf("expected noise-only evidence with log header to be ignored, got fp=%q normalized=%q exception=%q title=%q", fp, normalized, exceptionClass, title)
+	}
+}

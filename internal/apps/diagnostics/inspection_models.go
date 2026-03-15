@@ -26,6 +26,9 @@ const (
 	defaultInspectionLookbackMinutes = 30
 	minInspectionLookbackMinutes     = 5
 	maxInspectionLookbackMinutes     = 24 * 60
+	defaultInspectionErrorThreshold  = 1
+	minInspectionErrorThreshold      = 1
+	maxInspectionErrorThreshold      = 1000
 )
 
 // InspectionReportStatus represents the execution status of one inspection report.
@@ -90,6 +93,7 @@ type ClusterInspectionReport struct {
 	Status            InspectionReportStatus  `json:"status" gorm:"size:20;index;not null"`
 	TriggerSource     InspectionTriggerSource `json:"trigger_source" gorm:"size:32;index;not null"`
 	LookbackMinutes   int                     `json:"lookback_minutes" gorm:"default:30"`
+	ErrorThreshold    int                     `json:"error_threshold" gorm:"default:1"`
 	RequestedByUserID uint                    `json:"requested_by_user_id" gorm:"index"`
 	RequestedBy       string                  `json:"requested_by" gorm:"size:120;index"`
 	Summary           string                  `json:"summary" gorm:"type:text"`
@@ -171,6 +175,7 @@ type StartClusterInspectionRequest struct {
 	ClusterID       uint                    `json:"cluster_id" binding:"required"`
 	TriggerSource   InspectionTriggerSource `json:"trigger_source"`
 	LookbackMinutes int                     `json:"lookback_minutes,omitempty"`
+	ErrorThreshold  int                     `json:"error_threshold,omitempty"`
 }
 
 // ClusterInspectionReportInfo is the API view model for one inspection report.
@@ -182,6 +187,7 @@ type ClusterInspectionReportInfo struct {
 	Status            InspectionReportStatus  `json:"status"`
 	TriggerSource     InspectionTriggerSource `json:"trigger_source"`
 	LookbackMinutes   int                     `json:"lookback_minutes"`
+	ErrorThreshold    int                     `json:"error_threshold"`
 	RequestedByUserID uint                    `json:"requested_by_user_id"`
 	RequestedBy       string                  `json:"requested_by"`
 	Summary           string                  `json:"summary"`
@@ -249,6 +255,7 @@ func (r *ClusterInspectionReport) ToInfo() *ClusterInspectionReportInfo {
 		Status:            r.Status,
 		TriggerSource:     r.TriggerSource,
 		LookbackMinutes:   firstNonZeroInt(r.LookbackMinutes, defaultInspectionLookbackMinutes),
+		ErrorThreshold:    firstNonZeroInt(r.ErrorThreshold, defaultInspectionErrorThreshold),
 		RequestedByUserID: r.RequestedByUserID,
 		RequestedBy:       r.RequestedBy,
 		Summary:           r.Summary,
@@ -350,6 +357,17 @@ func normalizeInspectionLookbackMinutes(value int) (int, bool) {
 	case value == 0:
 		return defaultInspectionLookbackMinutes, true
 	case value < minInspectionLookbackMinutes || value > maxInspectionLookbackMinutes:
+		return 0, false
+	default:
+		return value, true
+	}
+}
+
+func normalizeInspectionErrorThreshold(value int) (int, bool) {
+	switch {
+	case value == 0:
+		return defaultInspectionErrorThreshold, true
+	case value < minInspectionErrorThreshold || value > maxInspectionErrorThreshold:
 		return 0, false
 	default:
 		return value, true

@@ -188,6 +188,43 @@ func TestIngestSeatunnelErrorAcceptsCursorResetAfterRotation(t *testing.T) {
 	assert.Equal(t, int64(120), cursor.CursorOffset)
 }
 
+func TestIngestSeatunnelErrorNoiseOnlyEvidenceAdvancesCursorWithoutCreatingEvent(t *testing.T) {
+	service, database := newDiagnosticsTestService(t)
+	req := &IngestSeatunnelErrorRequest{
+		ClusterID:   1,
+		NodeID:      11,
+		HostID:      21,
+		AgentID:     "agent-a",
+		Role:        "worker",
+		InstallDir:  "/opt/seatunnel-a",
+		SourceFile:  "/opt/seatunnel-a/logs/seatunnel-engine-worker.log",
+		SourceKind:  "engine",
+		OccurredAt:  time.Now().UTC(),
+		Message:     "Fatal Error,",
+		Evidence:    "[] 2026-03-15 00:33:22,900 ERROR [o.a.s.c.s.SeaTunnel           ] [main] - Fatal Error,\n===============================================================================\nFatal Error,\nPlease submit bug report in https://github.com/apache/seatunnel/issues\nReason:SeaTunnel job executed failed\n",
+		CursorStart: 100,
+		CursorEnd:   220,
+	}
+
+	require.NoError(t, service.IngestSeatunnelError(t.Context(), req))
+
+	var eventCount int64
+	require.NoError(t, database.Model(&SeatunnelErrorEvent{}).Count(&eventCount).Error)
+	assert.Equal(t, int64(0), eventCount)
+
+	var groupCount int64
+	require.NoError(t, database.Model(&SeatunnelErrorGroup{}).Count(&groupCount).Error)
+	assert.Equal(t, int64(0), groupCount)
+
+	var cursor SeatunnelLogCursor
+	require.NoError(t, database.First(&cursor).Error)
+	assert.Equal(t, int64(220), cursor.CursorOffset)
+
+	require.NoError(t, service.IngestSeatunnelError(t.Context(), req))
+	require.NoError(t, database.Model(&SeatunnelErrorEvent{}).Count(&eventCount).Error)
+	assert.Equal(t, int64(0), eventCount)
+}
+
 func TestGetSeatunnelErrorGroupDetailScopesEventsAndEnrichesHostDisplay(t *testing.T) {
 	service, _ := newDiagnosticsTestService(t)
 	service.SetHostReader(&fakeDiagnosticsHostReader{

@@ -25,16 +25,25 @@ import (
 )
 
 var (
-	exceptionClassPattern = regexp.MustCompile(`([A-Za-z0-9_$.]+(?:Exception|Error))`)
-	timestampPattern      = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?`)
-	uuidPattern           = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
-	ipPattern             = regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}\b`)
-	hexPattern            = regexp.MustCompile(`0x[0-9a-fA-F]+`)
-	durationPattern       = regexp.MustCompile(`\b\d+(?:\.\d+)?\s*(?:ns|us|µs|ms|s|m|h|sec|secs|second|seconds|minute|minutes|hour|hours)\b`)
-	numberPattern         = regexp.MustCompile(`\b\d+\b`)
-	statusSuffixPattern   = regexp.MustCompile(`\b([A-Z][A-Z0-9_]{2,}:\s+.+)$`)
-	whitespacePattern     = regexp.MustCompile(`\s+`)
+	exceptionClassPattern   = regexp.MustCompile(`([A-Za-z0-9_$.]+(?:Exception|Error))`)
+	javaThreadPrefixPattern = regexp.MustCompile(`^Exception in thread "[^"]+"\s+`)
+	seatunnelLogHeaderPattern = regexp.MustCompile(`^(?:\[[^\]]*\]\s+)?\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?\s+(?:TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\s+(?:\[[^\]]*\]\s+){0,2}-\s*`)
+	timestampPattern        = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?`)
+	uuidPattern             = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	ipPattern               = regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}\b`)
+	hexPattern              = regexp.MustCompile(`0x[0-9a-fA-F]+`)
+	durationPattern         = regexp.MustCompile(`\b\d+(?:\.\d+)?\s*(?:ns|us|µs|ms|s|m|h|sec|secs|second|seconds|minute|minutes|hour|hours)\b`)
+	numberPattern           = regexp.MustCompile(`\b\d+\b`)
+	statusSuffixPattern     = regexp.MustCompile(`\b([A-Z][A-Z0-9_]{2,}:\s+.+)$`)
+	separatorOnlyPattern    = regexp.MustCompile(`^[=\-_*#~\s]+$`)
+	whitespacePattern       = regexp.MustCompile(`\s+`)
 )
+
+var diagnosticNoiseExactLines = map[string]struct{}{
+	"fatal error": {},
+	"please submit bug report in https://github.com/apache/seatunnel/issues": {},
+	"reason:seatunnel job executed failed":                                   {},
+}
 
 // BuildErrorFingerprint normalizes a Seatunnel error sample into a stable fingerprint.
 // BuildErrorFingerprint 将 Seatunnel 错误样本归一化为稳定指纹。
@@ -49,6 +58,9 @@ func BuildErrorFingerprint(message, evidence string) (fingerprint, normalized, e
 	normalized = normalizeFingerprintText(strings.Join(composeFingerprintLines(title, rootLine, raw, exceptionClass), "\n"))
 	if normalized == "" {
 		normalized = normalizeFingerprintText(title)
+	}
+	if normalized == "" {
+		return "", "", "", ""
 	}
 	hash := sha256.Sum256([]byte(normalized))
 	return hex.EncodeToString(hash[:]), normalized, exceptionClass, title
@@ -72,7 +84,7 @@ func buildErrorTitle(rootLine, message, evidence, exceptionClass string) string 
 	}
 	for _, item := range candidates {
 		item = canonicalizeFingerprintLine(item)
-		if item == "" {
+		if item == "" || isDiagnosticNoiseLine(item) {
 			continue
 		}
 		if exceptionClass != "" && !strings.Contains(item, exceptionClass) {
@@ -88,6 +100,9 @@ func composeFingerprintLines(title, rootLine, evidence, exceptionClass string) [
 	seen := make(map[string]struct{}, 8)
 	appendUnique := func(value string) {
 		value = canonicalizeFingerprintLine(value)
+		if isDiagnosticNoiseLine(value) {
+			return
+		}
 		if value == "" {
 			return
 		}
@@ -139,7 +154,7 @@ func extractRootCauseLine(message, evidence string) string {
 		strings.TrimSpace(message),
 		firstMeaningfulLine(evidence),
 	} {
-		if line := canonicalizeFingerprintLine(candidate); line != "" {
+		if line := canonicalizeFingerprintLine(candidate); line != "" && !isDiagnosticNoiseLine(line) {
 			return line
 		}
 	}
@@ -151,7 +166,10 @@ func lastCausedByLine(value string) string {
 	for _, line := range strings.Split(value, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "Caused by:") {
-			result = strings.TrimSpace(strings.TrimPrefix(trimmed, "Caused by:"))
+			candidate := strings.TrimSpace(strings.TrimPrefix(trimmed, "Caused by:"))
+			if !isDiagnosticNoiseLine(candidate) {
+				result = candidate
+			}
 		}
 	}
 	return result
@@ -165,10 +183,16 @@ func canonicalizeFingerprintLine(value string) string {
 	if strings.HasPrefix(trimmed, "Caused by:") {
 		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "Caused by:"))
 	}
-	if matches := statusSuffixPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
-		return strings.TrimSpace(matches[1])
+	if strings.HasPrefix(trimmed, "Exception StackTrace:") {
+		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "Exception StackTrace:"))
 	}
-	return trimmed
+	trimmed = strings.TrimSpace(seatunnelLogHeaderPattern.ReplaceAllString(trimmed, ""))
+	trimmed = strings.TrimSpace(javaThreadPrefixPattern.ReplaceAllString(trimmed, ""))
+	if matches := statusSuffixPattern.FindStringSubmatch(trimmed); len(matches) == 2 {
+		trimmed = strings.TrimSpace(matches[1])
+	}
+	trimmed = whitespacePattern.ReplaceAllString(trimmed, " ")
+	return strings.TrimSpace(trimmed)
 }
 
 func firstMeaningfulLine(value string) string {
@@ -177,7 +201,27 @@ func firstMeaningfulLine(value string) string {
 		if trimmed == "" || strings.HasPrefix(trimmed, "at ") {
 			continue
 		}
-		return canonicalizeFingerprintLine(trimmed)
+		candidate := canonicalizeFingerprintLine(trimmed)
+		if isDiagnosticNoiseLine(candidate) {
+			continue
+		}
+		return candidate
 	}
 	return ""
+}
+
+func isDiagnosticNoiseLine(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return true
+	}
+	if separatorOnlyPattern.MatchString(trimmed) {
+		return true
+	}
+	normalized := strings.ToLower(strings.Trim(trimmed, " \t\r\n,.;:-"))
+	if normalized == "" {
+		return true
+	}
+	_, ok := diagnosticNoiseExactLines[normalized]
+	return ok
 }

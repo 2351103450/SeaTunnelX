@@ -36,7 +36,6 @@ const (
 	inspectionCheckRecentErrorBurst   = "recent_error_burst"
 	inspectionCheckActiveAlert        = "active_alert"
 	defaultInspectionRecentEventLimit = 200
-	defaultInspectionErrorThreshold   = int64(3)
 )
 
 // InspectionEvaluationResult contains the current inspection findings before persistence.
@@ -55,12 +54,15 @@ type InspectionEvaluationResult struct {
 // EvaluateInspectionFindings evaluates first-batch inspection checks using
 // managed runtime, process events, alerts, and recent error groups.
 // EvaluateInspectionFindings 基于受管运行时、进程事件、告警与近期错误组评估首批巡检发现项。
-func (s *Service) EvaluateInspectionFindings(ctx context.Context, clusterID uint, lookbackWindow time.Duration) (*InspectionEvaluationResult, error) {
+func (s *Service) EvaluateInspectionFindings(ctx context.Context, clusterID uint, lookbackWindow time.Duration, errorThreshold int) (*InspectionEvaluationResult, error) {
 	if s == nil || s.clusterService == nil {
 		return nil, ErrDiagnosticsRepositoryUnavailable
 	}
 	if lookbackWindow <= 0 {
 		lookbackWindow = time.Duration(defaultInspectionLookbackMinutes) * time.Minute
+	}
+	if errorThreshold <= 0 {
+		errorThreshold = defaultInspectionErrorThreshold
 	}
 
 	statusInfo, err := s.clusterService.GetStatus(ctx, clusterID)
@@ -80,7 +82,7 @@ func (s *Service) EvaluateInspectionFindings(ctx context.Context, clusterID uint
 	}
 
 	if s.repo != nil {
-		errorFindings, err := s.evaluateRecentErrorFindings(ctx, clusterID, lookbackWindow)
+		errorFindings, err := s.evaluateRecentErrorFindings(ctx, clusterID, lookbackWindow, errorThreshold)
 		if err != nil {
 			return nil, err
 		}
@@ -187,16 +189,19 @@ func (s *Service) evaluateProcessEventFindings(ctx context.Context, clusterID ui
 	return findings, nil
 }
 
-func (s *Service) evaluateRecentErrorFindings(ctx context.Context, clusterID uint, lookbackWindow time.Duration) ([]*ClusterInspectionFinding, error) {
+func (s *Service) evaluateRecentErrorFindings(ctx context.Context, clusterID uint, lookbackWindow time.Duration, errorThreshold int) ([]*ClusterInspectionFinding, error) {
 	since := time.Now().UTC().Add(-lookbackWindow)
 	bursts, err := s.repo.ListRecentErrorGroupBursts(ctx, clusterID, since, 20)
 	if err != nil {
 		return nil, err
 	}
+	if errorThreshold <= 0 {
+		errorThreshold = defaultInspectionErrorThreshold
+	}
 
 	findings := make([]*ClusterInspectionFinding, 0)
 	for _, burst := range bursts {
-		if burst == nil || burst.Group == nil || burst.RecentCount < defaultInspectionErrorThreshold {
+		if burst == nil || burst.Group == nil || burst.RecentCount < int64(errorThreshold) {
 			continue
 		}
 		group := burst.Group

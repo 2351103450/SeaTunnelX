@@ -48,6 +48,7 @@ func TestInspectionRepositoryCreateAndListReportsAndFindings(t *testing.T) {
 		ClusterID:         7,
 		Status:            InspectionReportStatusCompleted,
 		TriggerSource:     InspectionTriggerSourceDiagnosticsWorkspace,
+		ErrorThreshold:    4,
 		RequestedByUserID: 99,
 		RequestedBy:       "admin",
 		Summary:           "cluster inspection completed",
@@ -108,6 +109,9 @@ func TestInspectionRepositoryCreateAndListReportsAndFindings(t *testing.T) {
 	if reports[0].RequestedBy != "admin" {
 		t.Fatalf("expected requested_by admin, got %s", reports[0].RequestedBy)
 	}
+	if reports[0].ErrorThreshold != 4 {
+		t.Fatalf("expected listed error_threshold=4, got %d", reports[0].ErrorThreshold)
+	}
 
 	gotReport, err := repo.GetInspectionReportByID(ctx, report.ID)
 	if err != nil {
@@ -115,6 +119,9 @@ func TestInspectionRepositoryCreateAndListReportsAndFindings(t *testing.T) {
 	}
 	if gotReport.FindingTotal != 2 || gotReport.CriticalCount != 1 || gotReport.WarningCount != 1 {
 		t.Fatalf("unexpected report counters: %+v", gotReport)
+	}
+	if gotReport.ErrorThreshold != 4 {
+		t.Fatalf("expected error_threshold=4, got %d", gotReport.ErrorThreshold)
 	}
 
 	reportFindings, totalFindings, err := repo.ListInspectionFindings(ctx, &ClusterInspectionFindingFilter{

@@ -20,21 +20,28 @@ package diagnostics
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/seatunnel/seatunnelX/internal/apps/cluster"
+	appconfig "github.com/seatunnel/seatunnelX/internal/apps/config"
 	"github.com/seatunnel/seatunnelX/internal/apps/monitor"
 	monitoringapp "github.com/seatunnel/seatunnelX/internal/apps/monitoring"
 	"github.com/seatunnel/seatunnelX/internal/config"
 	"github.com/seatunnel/seatunnelX/internal/logger"
+	"gopkg.in/yaml.v3"
 )
 
 type diagnosticBundleArtifact struct {
@@ -52,30 +59,171 @@ type diagnosticBundleArtifact struct {
 }
 
 type diagnosticBundleManifest struct {
-	Version       string                      `json:"version"`
-	TaskID        uint                        `json:"task_id"`
-	ClusterID     uint                        `json:"cluster_id"`
-	TriggerSource DiagnosticTaskSourceType    `json:"trigger_source"`
-	SourceRef     DiagnosticTaskSourceRef     `json:"source_ref"`
-	Options       DiagnosticTaskOptions       `json:"options"`
-	Status        DiagnosticTaskStatus        `json:"status"`
-	Summary       string                      `json:"summary"`
-	CreatedBy     uint                        `json:"created_by"`
-	CreatedByName string                      `json:"created_by_name"`
-	StartedAt     *time.Time                  `json:"started_at,omitempty"`
-	CompletedAt   *time.Time                  `json:"completed_at,omitempty"`
-	GeneratedAt   time.Time                   `json:"generated_at"`
-	Artifacts     []*diagnosticBundleArtifact `json:"artifacts"`
+	Version         string                      `json:"version"`
+	TaskID          uint                        `json:"task_id"`
+	ClusterID       uint                        `json:"cluster_id"`
+	TriggerSource   DiagnosticTaskSourceType    `json:"trigger_source"`
+	SourceRef       DiagnosticTaskSourceRef     `json:"source_ref"`
+	Options         DiagnosticTaskOptions       `json:"options"`
+	Status          DiagnosticTaskStatus        `json:"status"`
+	Summary         string                      `json:"summary"`
+	LookbackMinutes int                         `json:"lookback_minutes,omitempty"`
+	WindowStart     *time.Time                  `json:"window_start,omitempty"`
+	WindowEnd       *time.Time                  `json:"window_end,omitempty"`
+	GeneratedAt     time.Time                   `json:"generated_at"`
+	Artifacts       []*diagnosticBundleArtifact `json:"artifacts"`
 }
 
 type diagnosticBundleExecutionState struct {
+	WindowStart      *time.Time
+	WindowEnd        *time.Time
+	LookbackMinutes  int
 	ErrorGroup       *SeatunnelErrorGroup
 	ErrorEvents      []*SeatunnelErrorEvent
 	InspectionDetail *ClusterInspectionReportDetailData
 	ProcessEvents    []*monitor.ProcessEvent
 	AlertSnapshot    []*monitoringapp.AlertInstance
 	ClusterSnapshot  *cluster.Cluster
+	ConfigSnapshot   *diagnosticConfigSnapshotSummary
+	MetricsSnapshot  *diagnosticPrometheusSnapshot
 	Artifacts        []*diagnosticBundleArtifact
+}
+
+type diagnosticCollectionWindow struct {
+	Start           time.Time
+	End             time.Time
+	LookbackMinutes int
+}
+
+type diagnosticCollectionWindowPayload struct {
+	StartAt         time.Time `json:"start_at"`
+	EndAt           time.Time `json:"end_at"`
+	LookbackMinutes int       `json:"lookback_minutes"`
+}
+
+type diagnosticConfigSnapshotSummary struct {
+	ClusterID          uint                           `json:"cluster_id"`
+	ClusterName        string                         `json:"cluster_name,omitempty"`
+	DeploymentMode     string                         `json:"deployment_mode,omitempty"`
+	CollectedAt        time.Time                      `json:"collected_at"`
+	Files              []diagnosticConfigSnapshotFile `json:"files"`
+	KeyHighlights      []diagnosticConfigKeyHighlight `json:"key_highlights,omitempty"`
+	DirectoryManifests []diagnosticDirectoryManifest  `json:"directory_manifests,omitempty"`
+	ConfigChanges      []diagnosticConfigChangeRecord `json:"config_changes,omitempty"`
+	CollectionNotes    []diagnosticConfigSnapshotNote `json:"collection_notes,omitempty"`
+}
+
+type diagnosticConfigSnapshotFile struct {
+	HostID      uint   `json:"host_id"`
+	HostName    string `json:"host_name,omitempty"`
+	HostIP      string `json:"host_ip,omitempty"`
+	NodeID      uint   `json:"node_id"`
+	Role        string `json:"role,omitempty"`
+	InstallDir  string `json:"install_dir,omitempty"`
+	ConfigType  string `json:"config_type"`
+	RemotePath  string `json:"remote_path,omitempty"`
+	LocalPath   string `json:"local_path,omitempty"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	ContentHash string `json:"content_hash,omitempty"`
+}
+
+type diagnosticConfigSnapshotNote struct {
+	HostID     uint   `json:"host_id"`
+	Role       string `json:"role,omitempty"`
+	ConfigType string `json:"config_type,omitempty"`
+	Message    string `json:"message"`
+}
+
+type diagnosticConfigKeyHighlight struct {
+	HostID     uint                       `json:"host_id"`
+	HostName   string                     `json:"host_name,omitempty"`
+	HostIP     string                     `json:"host_ip,omitempty"`
+	NodeID     uint                       `json:"node_id"`
+	Role       string                     `json:"role,omitempty"`
+	ConfigType string                     `json:"config_type"`
+	RemotePath string                     `json:"remote_path,omitempty"`
+	Items      []diagnosticConfigKeyValue `json:"items"`
+}
+
+type diagnosticConfigKeyValue struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type diagnosticDirectoryManifest struct {
+	HostID     uint                              `json:"host_id"`
+	HostName   string                            `json:"host_name,omitempty"`
+	HostIP     string                            `json:"host_ip,omitempty"`
+	NodeID     uint                              `json:"node_id"`
+	Role       string                            `json:"role,omitempty"`
+	Directory  string                            `json:"directory"`
+	LocalPath  string                            `json:"local_path,omitempty"`
+	EntryCount int                               `json:"entry_count"`
+	Entries    []diagnosticDirectoryManifestItem `json:"entries"`
+}
+
+type diagnosticDirectoryManifestItem struct {
+	Name    string    `json:"name"`
+	Path    string    `json:"path"`
+	Size    int64     `json:"size"`
+	Mode    string    `json:"mode,omitempty"`
+	ModTime time.Time `json:"mod_time,omitempty"`
+	IsDir   bool      `json:"is_dir"`
+}
+
+type diagnosticConfigChangeRecord struct {
+	ConfigID   uint      `json:"config_id"`
+	ClusterID  uint      `json:"cluster_id"`
+	HostID     *uint     `json:"host_id,omitempty"`
+	HostScope  string    `json:"host_scope,omitempty"`
+	ConfigType string    `json:"config_type"`
+	FilePath   string    `json:"file_path,omitempty"`
+	Version    int       `json:"version"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	UpdatedBy  uint      `json:"updated_by"`
+	IsTemplate bool      `json:"is_template"`
+}
+
+type agentPullConfigResult struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message"`
+	ConfigType string `json:"config_type"`
+	Content    string `json:"content"`
+	FilePath   string `json:"file_path"`
+}
+
+type agentDirectoryListingResult struct {
+	Path    string                            `json:"path"`
+	Entries []diagnosticDirectoryManifestItem `json:"entries"`
+}
+
+type diagnosticPrometheusSnapshot struct {
+	ClusterID       uint                         `json:"cluster_id"`
+	WindowStart     time.Time                    `json:"window_start"`
+	WindowEnd       time.Time                    `json:"window_end"`
+	StepSeconds     int                          `json:"step_seconds"`
+	Signals         []diagnosticPrometheusSignal `json:"signals"`
+	CollectionNotes []string                     `json:"collection_notes,omitempty"`
+}
+
+type diagnosticPrometheusSignal struct {
+	Key           string                              `json:"key"`
+	Title         string                              `json:"title"`
+	Summary       string                              `json:"summary"`
+	PromQL        string                              `json:"promql"`
+	Unit          string                              `json:"unit"`
+	Threshold     float64                             `json:"threshold"`
+	ThresholdText string                              `json:"threshold_text"`
+	Status        string                              `json:"status"`
+	Series        []diagnosticPrometheusSeriesSummary `json:"series"`
+}
+
+type diagnosticPrometheusSeriesSummary struct {
+	Instance  string  `json:"instance"`
+	MinValue  float64 `json:"min_value"`
+	MaxValue  float64 `json:"max_value"`
+	LastValue float64 `json:"last_value"`
+	Samples   int     `json:"samples"`
 }
 
 type diagnosticBundleHTMLPayload struct {
@@ -85,10 +233,12 @@ type diagnosticBundleHTMLPayload struct {
 	// Critical Findings：按严重级别排序的关键发现（来自巡检发现或错误/告警上下文）
 	Inspection *diagnosticBundleHTMLInspectionPanel `json:"inspection,omitempty"`
 	// Evidence：证据详情，按需展开
-	ErrorContext   *diagnosticBundleHTMLErrorPanel     `json:"error_context,omitempty"`
-	AlertSnapshot  *diagnosticBundleHTMLAlertPanel     `json:"alert_snapshot,omitempty"`
-	ProcessEvents  *diagnosticBundleHTMLProcessPanel   `json:"process_events,omitempty"`
-	ArtifactGroups []diagnosticBundleHTMLArtifactGroup `json:"artifact_groups"`
+	ErrorContext    *diagnosticBundleHTMLErrorPanel     `json:"error_context,omitempty"`
+	AlertSnapshot   *diagnosticBundleHTMLAlertPanel     `json:"alert_snapshot,omitempty"`
+	ProcessEvents   *diagnosticBundleHTMLProcessPanel   `json:"process_events,omitempty"`
+	ConfigSnapshot  *diagnosticBundleHTMLConfigPanel    `json:"config_snapshot,omitempty"`
+	MetricsSnapshot *diagnosticBundleHTMLMetricsPanel   `json:"metrics_snapshot,omitempty"`
+	ArtifactGroups  []diagnosticBundleHTMLArtifactGroup `json:"artifact_groups"`
 
 	// 附录类信息：任务概览、执行过程、溯源与建议，弱化展示
 	Cluster            *diagnosticBundleHTMLClusterSummary `json:"cluster,omitempty"`
@@ -203,6 +353,28 @@ type diagnosticBundleHTMLProcessPanel struct {
 	Total  int                                `json:"total"`
 	ByType []diagnosticBundleHTMLMetricCard   `json:"by_type"`
 	Events []diagnosticBundleHTMLProcessEvent `json:"events"`
+}
+
+type diagnosticBundleHTMLConfigPanel struct {
+	FileCount          int                            `json:"file_count"`
+	KeyHighlightCount  int                            `json:"key_highlight_count"`
+	DirectoryCount     int                            `json:"directory_count"`
+	ChangedConfigCount int                            `json:"changed_config_count"`
+	KeyHighlights      []diagnosticConfigKeyHighlight `json:"key_highlights"`
+	RecentChanges      []diagnosticConfigChangeRecord `json:"recent_changes"`
+	RemainingChanges   []diagnosticConfigChangeRecord `json:"remaining_changes"`
+	Files              []diagnosticConfigSnapshotFile `json:"files"`
+	DirectoryManifests []diagnosticDirectoryManifest  `json:"directory_manifests"`
+	ConfigChanges      []diagnosticConfigChangeRecord `json:"config_changes"`
+	CollectionNotes    []diagnosticConfigSnapshotNote `json:"collection_notes"`
+}
+
+type diagnosticBundleHTMLMetricsPanel struct {
+	SignalCount        int                          `json:"signal_count"`
+	AnomalyCount       int                          `json:"anomaly_count"`
+	HighlightedSignals []diagnosticPrometheusSignal `json:"highlighted_signals"`
+	AdditionalSignals  []diagnosticPrometheusSignal `json:"additional_signals"`
+	CollectionNotes    []string                     `json:"collection_notes,omitempty"`
 }
 
 type diagnosticBundleHTMLProcessEvent struct {
@@ -444,7 +616,7 @@ func (s *Service) runDiagnosticTask(ctx context.Context, task *DiagnosticTask) e
 		return err
 	}
 	if task.ManifestPath != "" {
-		if err := writeDiagnosticBundleManifestFile(task.ManifestPath, task, state.Artifacts); err != nil {
+		if err := writeDiagnosticBundleManifestFile(task.ManifestPath, task, state.Artifacts, state); err != nil {
 			return err
 		}
 	}
@@ -460,7 +632,7 @@ func (s *Service) executeDiagnosticPlanStep(ctx context.Context, task *Diagnosti
 	case DiagnosticStepCodeCollectAlertSnapshot:
 		return s.executeCollectAlertSnapshotStep(ctx, task, step, state, bundleDir)
 	case DiagnosticStepCodeCollectConfigSnapshot:
-		return s.executeCollectConfigSnapshotStep(ctx, task, step, state, bundleDir)
+		return s.executeCollectConfigSnapshotStep(ctx, task, step, nodesByClusterNodeID, state, bundleDir)
 	case DiagnosticStepCodeCollectLogSample:
 		return s.executeCollectLogSampleStep(ctx, task, step, nodesByClusterNodeID, state, bundleDir)
 	case DiagnosticStepCodeCollectThreadDump:
@@ -491,6 +663,23 @@ func (s *Service) executeCollectErrorContextStep(ctx context.Context, task *Diag
 		"trigger_source": task.TriggerSource,
 		"source_ref":     task.SourceRef,
 	}
+	if task.SourceRef.InspectionReportID > 0 {
+		detail, err := s.GetInspectionReportDetail(ctx, task.SourceRef.InspectionReportID)
+		if err != nil {
+			return err
+		}
+		state.InspectionDetail = detail
+		payload["inspection_detail"] = detail
+	}
+	window := resolveDiagnosticCollectionWindow(task, state.InspectionDetail)
+	state.WindowStart = timePtr(window.Start)
+	state.WindowEnd = timePtr(window.End)
+	state.LookbackMinutes = window.LookbackMinutes
+	payload["collection_window"] = diagnosticCollectionWindowPayload{
+		StartAt:         window.Start,
+		EndAt:           window.End,
+		LookbackMinutes: window.LookbackMinutes,
+	}
 	if task.SourceRef.ErrorGroupID > 0 {
 		group, err := s.repo.GetErrorGroupByID(ctx, task.SourceRef.ErrorGroupID)
 		if err != nil {
@@ -499,6 +688,8 @@ func (s *Service) executeCollectErrorContextStep(ctx context.Context, task *Diag
 		state.ErrorGroup = group
 		events, _, err := s.repo.ListErrorEvents(ctx, &SeatunnelErrorEventFilter{
 			ErrorGroupID: group.ID,
+			StartTime:    timePtr(window.Start),
+			EndTime:      timePtr(window.End),
 			Page:         1,
 			PageSize:     100,
 		})
@@ -509,14 +700,6 @@ func (s *Service) executeCollectErrorContextStep(ctx context.Context, task *Diag
 		payload["error_group"] = group
 		payload["error_events"] = events
 	}
-	if task.SourceRef.InspectionReportID > 0 {
-		detail, err := s.GetInspectionReportDetail(ctx, task.SourceRef.InspectionReportID)
-		if err != nil {
-			return err
-		}
-		state.InspectionDetail = detail
-		payload["inspection_detail"] = detail
-	}
 	return s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "error-context.json", payload, &diagnosticBundleArtifact{
 		StepCode: step.Code,
 		Category: "error_context",
@@ -526,14 +709,45 @@ func (s *Service) executeCollectErrorContextStep(ctx context.Context, task *Diag
 }
 
 func (s *Service) executeCollectProcessEventsStep(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, state *diagnosticBundleExecutionState, bundleDir string) error {
+	window := resolveDiagnosticCollectionWindow(task, state.InspectionDetail)
+	state.WindowStart = timePtr(window.Start)
+	state.WindowEnd = timePtr(window.End)
+	state.LookbackMinutes = window.LookbackMinutes
 	if s.monitorService == nil {
 		state.ProcessEvents = []*monitor.ProcessEvent{}
 	} else {
-		events, err := s.monitorService.ListClusterEvents(ctx, task.ClusterID, 200)
-		if err != nil {
-			return err
+		loadedFromFilteredQuery := false
+		if filteredReader, ok := s.monitorService.(interface {
+			ListEvents(ctx context.Context, filter *monitor.ProcessEventFilter) ([]*monitor.ProcessEventWithHost, int64, error)
+		}); ok {
+			rows, _, err := filteredReader.ListEvents(ctx, &monitor.ProcessEventFilter{
+				ClusterID: task.ClusterID,
+				StartTime: timePtr(window.Start),
+				EndTime:   timePtr(window.End),
+				Page:      1,
+				PageSize:  100,
+			})
+			if err != nil {
+				return err
+			}
+			events := make([]*monitor.ProcessEvent, 0, len(rows))
+			for _, row := range rows {
+				if row == nil {
+					continue
+				}
+				eventCopy := row.ProcessEvent
+				events = append(events, &eventCopy)
+			}
+			state.ProcessEvents = filterDiagnosticProcessEventsByWindow(events, window.Start, window.End)
+			loadedFromFilteredQuery = true
 		}
-		state.ProcessEvents = events
+		if !loadedFromFilteredQuery || len(state.ProcessEvents) == 0 {
+			events, err := s.monitorService.ListClusterEvents(ctx, task.ClusterID, 200)
+			if err != nil {
+				return err
+			}
+			state.ProcessEvents = filterDiagnosticProcessEventsByWindow(events, window.Start, window.End)
+		}
 	}
 	return s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "process-events.json", state.ProcessEvents, &diagnosticBundleArtifact{
 		StepCode: step.Code,
@@ -544,6 +758,10 @@ func (s *Service) executeCollectProcessEventsStep(ctx context.Context, task *Dia
 }
 
 func (s *Service) executeCollectAlertSnapshotStep(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, state *diagnosticBundleExecutionState, bundleDir string) error {
+	window := resolveDiagnosticCollectionWindow(task, state.InspectionDetail)
+	state.WindowStart = timePtr(window.Start)
+	state.WindowEnd = timePtr(window.End)
+	state.LookbackMinutes = window.LookbackMinutes
 	alerts := make([]*monitoringapp.AlertInstance, 0)
 	if s.monitoringService != nil {
 		data, err := s.monitoringService.ListAlertInstances(ctx, &monitoringapp.AlertInstanceFilter{
@@ -558,39 +776,807 @@ func (s *Service) executeCollectAlertSnapshotStep(ctx context.Context, task *Dia
 			alerts = data.Alerts
 		}
 	}
-	if task.SourceRef.AlertID != "" {
-		filtered := make([]*monitoringapp.AlertInstance, 0, len(alerts))
-		for _, alert := range alerts {
-			if alert != nil && strings.TrimSpace(alert.AlertID) == strings.TrimSpace(task.SourceRef.AlertID) {
-				filtered = append(filtered, alert)
-			}
-		}
-		alerts = filtered
-	}
-	state.AlertSnapshot = alerts
-	return s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "alert-snapshot.json", alerts, &diagnosticBundleArtifact{
+	state.AlertSnapshot = filterDiagnosticAlertsByWindow(alerts, window.Start, window.End, task.SourceRef.AlertID)
+	if err := s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "alert-snapshot.json", state.AlertSnapshot, &diagnosticBundleArtifact{
 		StepCode: step.Code,
 		Category: "alert_snapshot",
 		Format:   "json",
 		Status:   "created",
-	})
+	}); err != nil {
+		return err
+	}
+	metricsSnapshot, err := s.collectDiagnosticPrometheusSnapshot(ctx, task, window)
+	if err != nil {
+		_ = s.AppendDiagnosticStepLog(ctx, &DiagnosticStepLog{
+			TaskID:         task.ID,
+			TaskStepID:     uintPtr(step.ID),
+			StepCode:       step.Code,
+			Level:          DiagnosticLogLevelWarn,
+			EventType:      DiagnosticLogEventTypeNote,
+			Message:        bilingualText(fmt.Sprintf("指标快照采集失败：%v", err), fmt.Sprintf("Metrics snapshot collection failed: %v", err)),
+			CommandSummary: "metrics_snapshot",
+			CreatedAt:      time.Now().UTC(),
+		})
+		return nil
+	}
+	if metricsSnapshot != nil && len(metricsSnapshot.Signals) > 0 {
+		state.MetricsSnapshot = metricsSnapshot
+		if err := s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "metrics-snapshot.json", metricsSnapshot, &diagnosticBundleArtifact{
+			StepCode: step.Code,
+			Category: "metrics_snapshot",
+			Format:   "json",
+			Status:   "created",
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (s *Service) executeCollectConfigSnapshotStep(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, state *diagnosticBundleExecutionState, bundleDir string) error {
+func (s *Service) executeCollectConfigSnapshotStep(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, nodesByClusterNodeID map[uint]*DiagnosticNodeExecution, state *diagnosticBundleExecutionState, bundleDir string) error {
 	if s.clusterService == nil {
 		return fmt.Errorf("cluster service is unavailable")
+	}
+	if s.agentSender == nil {
+		return fmt.Errorf("agent sender is unavailable")
 	}
 	clusterInfo, err := s.clusterService.Get(ctx, task.ClusterID)
 	if err != nil {
 		return err
 	}
 	state.ClusterSnapshot = clusterInfo
-	return s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "config-snapshot.json", clusterInfo, &diagnosticBundleArtifact{
+	window := resolveDiagnosticCollectionWindow(task, state.InspectionDetail)
+	state.WindowStart = timePtr(window.Start)
+	state.WindowEnd = timePtr(window.End)
+	state.LookbackMinutes = window.LookbackMinutes
+	configDir := filepath.Join(bundleDir, "configs")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return err
+	}
+	summary := &diagnosticConfigSnapshotSummary{
+		ClusterID:          task.ClusterID,
+		ClusterName:        strings.TrimSpace(clusterInfo.Name),
+		DeploymentMode:     strings.TrimSpace(string(clusterInfo.DeploymentMode)),
+		CollectedAt:        time.Now().UTC(),
+		Files:              make([]diagnosticConfigSnapshotFile, 0, len(task.SelectedNodes)*6),
+		KeyHighlights:      make([]diagnosticConfigKeyHighlight, 0, len(task.SelectedNodes)*4),
+		DirectoryManifests: make([]diagnosticDirectoryManifest, 0, len(task.SelectedNodes)*3),
+		ConfigChanges:      make([]diagnosticConfigChangeRecord, 0),
+		CollectionNotes:    make([]diagnosticConfigSnapshotNote, 0, len(task.SelectedNodes)),
+	}
+	var successCount int
+	var errs []string
+	for _, selected := range sortedDiagnosticTaskTargets(task.SelectedNodes) {
+		node := nodesByClusterNodeID[selected.ClusterNodeID]
+		if node == nil {
+			continue
+		}
+		if err := s.beginDiagnosticNodeStep(ctx, step, node, bilingualText("正在采集 SeaTunnel 配置文件。", "Collecting SeaTunnel config files.")); err != nil {
+			return err
+		}
+		seenPaths := make(map[string]struct{})
+		configTypes := buildDiagnosticConfigTypesForTarget(clusterInfo.DeploymentMode, selected.Role)
+		nodeSuccess := false
+		for _, configType := range configTypes {
+			result, detail, err := s.pullDiagnosticConfigFile(ctx, selected, configType)
+			if err != nil || result == nil || !result.Success || strings.TrimSpace(result.Content) == "" {
+				summary.CollectionNotes = append(summary.CollectionNotes, diagnosticConfigSnapshotNote{
+					HostID:     selected.HostID,
+					Role:       selected.Role,
+					ConfigType: string(configType),
+					Message:    detail,
+				})
+				_ = s.AppendDiagnosticStepLog(ctx, &DiagnosticStepLog{
+					TaskID:          task.ID,
+					TaskStepID:      uintPtr(step.ID),
+					NodeExecutionID: uintPtr(node.ID),
+					StepCode:        step.Code,
+					Level:           DiagnosticLogLevelWarn,
+					EventType:       DiagnosticLogEventTypeNote,
+					Message:         bilingualText(fmt.Sprintf("读取 %s 失败：%s", configType, detail), fmt.Sprintf("Failed to read %s: %s", configType, detail)),
+					CommandSummary:  string(configType),
+					CreatedAt:       time.Now().UTC(),
+				})
+				continue
+			}
+			if err := s.collectDiagnosticConfigArtifact(ctx, task, step, state, summary, configDir, selected, string(configType), firstNonEmptyString(result.FilePath, appconfig.GetConfigFilePath(configType), string(configType)), result.Content, node, seenPaths); err != nil {
+				return err
+			}
+			nodeSuccess = true
+		}
+		for _, extraFile := range buildDiagnosticExtraConfigFilesForTarget(clusterInfo.DeploymentMode, selected.Role) {
+			content, detail, err := s.pullDiagnosticRawFile(ctx, selected, filepath.Join(selected.InstallDir, "config", extraFile))
+			if err != nil || strings.TrimSpace(content) == "" {
+				summary.CollectionNotes = append(summary.CollectionNotes, diagnosticConfigSnapshotNote{
+					HostID:     selected.HostID,
+					Role:       selected.Role,
+					ConfigType: extraFile,
+					Message:    detail,
+				})
+				continue
+			}
+			if err := s.collectDiagnosticConfigArtifact(ctx, task, step, state, summary, configDir, selected, extraFile, filepath.Join(selected.InstallDir, "config", extraFile), content, node, seenPaths); err != nil {
+				return err
+			}
+			nodeSuccess = true
+		}
+		for _, inventoryDir := range []string{"config", "lib", "connectors"} {
+			manifest, detail, err := s.pullDiagnosticDirectoryManifest(ctx, selected, filepath.Join(selected.InstallDir, inventoryDir))
+			if err != nil || manifest == nil {
+				summary.CollectionNotes = append(summary.CollectionNotes, diagnosticConfigSnapshotNote{
+					HostID:     selected.HostID,
+					Role:       selected.Role,
+					ConfigType: inventoryDir,
+					Message:    detail,
+				})
+				continue
+			}
+			if err := s.collectDiagnosticDirectoryManifestArtifact(ctx, task, step, state, summary, configDir, selected, inventoryDir, manifest, node); err != nil {
+				return err
+			}
+			nodeSuccess = true
+		}
+		if nodeSuccess {
+			successCount++
+			if err := s.finishDiagnosticNodeStep(ctx, step, node, DiagnosticTaskStatusSucceeded, bilingualText("配置文件采集完成。", "Config files collected.")); err != nil {
+				return err
+			}
+			continue
+		}
+		errs = append(errs, fmt.Sprintf("host=%d", selected.HostID))
+		if err := s.finishDiagnosticNodeStep(ctx, step, node, DiagnosticTaskStatusFailed, bilingualText("未采集到有效配置文件。", "No config files were collected.")); err != nil {
+			return err
+		}
+	}
+	if successCount == 0 {
+		return formatDiagnosticAllNodesFailed("全部节点配置文件采集失败", "Config file collection failed on all nodes", errs)
+	}
+	if s.configRepo != nil {
+		changes, err := s.configRepo.ListUpdatedByClusterBetween(ctx, task.ClusterID, window.Start, window.End)
+		if err != nil {
+			summary.CollectionNotes = append(summary.CollectionNotes, diagnosticConfigSnapshotNote{
+				Message: fmt.Sprintf("load config change history failed: %v", err),
+			})
+		} else {
+			summary.ConfigChanges = buildDiagnosticConfigChangeRecords(changes)
+		}
+	}
+	state.ConfigSnapshot = summary
+	return s.writeDiagnosticJSONArtifact(ctx, task, step, state, bundleDir, "config-snapshot.json", summary, &diagnosticBundleArtifact{
 		StepCode: step.Code,
 		Category: "config_snapshot",
 		Format:   "json",
 		Status:   "created",
 	})
+}
+
+func (s *Service) pullDiagnosticConfigFile(ctx context.Context, target DiagnosticTaskNodeTarget, configType appconfig.ConfigType) (*agentPullConfigResult, string, error) {
+	success, output, err := s.agentSender.SendCommand(ctx, target.AgentID, "pull_config", map[string]string{
+		"install_dir": target.InstallDir,
+		"config_type": string(configType),
+	})
+	if err != nil || !success {
+		detail := resolveDiagnosticCommandFailure(output, err, "配置文件采集失败。", "Config collection failed.")
+		return nil, detail, err
+	}
+	var result agentPullConfigResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		return nil, fmt.Sprintf("parse pull_config response failed: %v", err), err
+	}
+	if !result.Success {
+		return &result, firstNonEmptyString(strings.TrimSpace(result.Message), "pull_config failed"), nil
+	}
+	return &result, "", nil
+}
+
+func (s *Service) pullDiagnosticRawFile(ctx context.Context, target DiagnosticTaskNodeTarget, absolutePath string) (string, string, error) {
+	success, output, err := s.agentSender.SendCommand(ctx, target.AgentID, "get_logs", map[string]string{
+		"log_file": absolutePath,
+		"mode":     "all",
+	})
+	if err != nil || !success {
+		detail := resolveDiagnosticCommandFailure(output, err, "文件采集失败。", "File collection failed.")
+		return "", detail, err
+	}
+	return output, "", nil
+}
+
+func (s *Service) pullDiagnosticDirectoryManifest(ctx context.Context, target DiagnosticTaskNodeTarget, absolutePath string) (*agentDirectoryListingResult, string, error) {
+	success, output, err := s.agentSender.SendCommand(ctx, target.AgentID, "get_logs", map[string]string{
+		"log_file": absolutePath,
+		"mode":     "list",
+	})
+	if err != nil || !success {
+		detail := resolveDiagnosticCommandFailure(output, err, "目录清单采集失败。", "Directory manifest collection failed.")
+		return nil, detail, err
+	}
+	var result agentDirectoryListingResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		return nil, fmt.Sprintf("parse directory listing failed: %v", err), err
+	}
+	return &result, "", nil
+}
+
+func (s *Service) collectDiagnosticConfigArtifact(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, state *diagnosticBundleExecutionState, summary *diagnosticConfigSnapshotSummary, configDir string, target DiagnosticTaskNodeTarget, configType string, remotePath string, content string, node *DiagnosticNodeExecution, seenPaths map[string]struct{}) error {
+	normalizedRemotePath := strings.TrimSpace(remotePath)
+	if normalizedRemotePath == "" {
+		normalizedRemotePath = strings.TrimSpace(configType)
+	}
+	if _, ok := seenPaths[normalizedRemotePath]; ok {
+		return nil
+	}
+	seenPaths[normalizedRemotePath] = struct{}{}
+
+	hostDir := filepath.Join(configDir, fmt.Sprintf("host-%d-%s", target.HostID, normalizeDiagnosticFileRole(target.Role)))
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		return err
+	}
+	fileName := filepath.Base(normalizedRemotePath)
+	localPath := filepath.Join(hostDir, fileName)
+	if err := os.WriteFile(localPath, []byte(content), 0o644); err != nil {
+		return err
+	}
+	hash := buildDiagnosticContentHash(content)
+	artifact := &diagnosticBundleArtifact{
+		StepCode:   step.Code,
+		Category:   "config_snapshot",
+		Format:     detectDiagnosticConfigFormat(fileName),
+		Status:     "created",
+		Path:       localPath,
+		RemotePath: normalizedRemotePath,
+		NodeID:     target.NodeID,
+		HostID:     target.HostID,
+		HostName:   target.HostName,
+		SizeBytes:  int64(len(content)),
+		Message:    configType,
+	}
+	state.Artifacts = append(state.Artifacts, artifact)
+	summary.Files = append(summary.Files, diagnosticConfigSnapshotFile{
+		HostID:      target.HostID,
+		HostName:    target.HostName,
+		HostIP:      target.HostIP,
+		NodeID:      target.NodeID,
+		Role:        target.Role,
+		InstallDir:  target.InstallDir,
+		ConfigType:  configType,
+		RemotePath:  normalizedRemotePath,
+		LocalPath:   localPath,
+		SizeBytes:   int64(len(content)),
+		ContentHash: hash,
+	})
+	if items := extractDiagnosticConfigHighlights(configType, normalizedRemotePath, content); len(items) > 0 {
+		summary.KeyHighlights = append(summary.KeyHighlights, diagnosticConfigKeyHighlight{
+			HostID:     target.HostID,
+			HostName:   target.HostName,
+			HostIP:     target.HostIP,
+			NodeID:     target.NodeID,
+			Role:       target.Role,
+			ConfigType: configType,
+			RemotePath: normalizedRemotePath,
+			Items:      items,
+		})
+	}
+	return s.AppendDiagnosticStepLog(ctx, &DiagnosticStepLog{
+		TaskID:          task.ID,
+		TaskStepID:      uintPtr(step.ID),
+		NodeExecutionID: uintPtr(node.ID),
+		StepCode:        step.Code,
+		Level:           DiagnosticLogLevelInfo,
+		EventType:       DiagnosticLogEventTypeSuccess,
+		Message:         bilingualText(fmt.Sprintf("已采集 %s 到 %s", configType, localPath), fmt.Sprintf("Collected %s to %s", configType, localPath)),
+		CommandSummary:  configType,
+		CreatedAt:       time.Now().UTC(),
+		Metadata: DiagnosticLogMetadata{
+			"remote_path": normalizedRemotePath,
+			"local_path":  localPath,
+			"hash":        hash,
+		},
+	})
+}
+
+func (s *Service) collectDiagnosticDirectoryManifestArtifact(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, state *diagnosticBundleExecutionState, summary *diagnosticConfigSnapshotSummary, configDir string, target DiagnosticTaskNodeTarget, category string, manifest *agentDirectoryListingResult, node *DiagnosticNodeExecution) error {
+	if manifest == nil {
+		return nil
+	}
+	hostDir := filepath.Join(configDir, fmt.Sprintf("host-%d-%s", target.HostID, normalizeDiagnosticFileRole(target.Role)))
+	if err := os.MkdirAll(hostDir, 0o755); err != nil {
+		return err
+	}
+	localPath := filepath.Join(hostDir, fmt.Sprintf("%s-manifest.json", strings.TrimSpace(category)))
+	payload, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(localPath, payload, 0o644); err != nil {
+		return err
+	}
+	state.Artifacts = append(state.Artifacts, &diagnosticBundleArtifact{
+		StepCode:   step.Code,
+		Category:   "directory_inventory",
+		Format:     "json",
+		Status:     "created",
+		Path:       localPath,
+		RemotePath: manifest.Path,
+		NodeID:     target.NodeID,
+		HostID:     target.HostID,
+		HostName:   target.HostName,
+		SizeBytes:  int64(len(payload)),
+		Message:    category,
+	})
+	summary.DirectoryManifests = append(summary.DirectoryManifests, diagnosticDirectoryManifest{
+		HostID:     target.HostID,
+		HostName:   target.HostName,
+		HostIP:     target.HostIP,
+		NodeID:     target.NodeID,
+		Role:       target.Role,
+		Directory:  manifest.Path,
+		LocalPath:  localPath,
+		EntryCount: len(manifest.Entries),
+		Entries:    manifest.Entries,
+	})
+	return s.AppendDiagnosticStepLog(ctx, &DiagnosticStepLog{
+		TaskID:          task.ID,
+		TaskStepID:      uintPtr(step.ID),
+		NodeExecutionID: uintPtr(node.ID),
+		StepCode:        step.Code,
+		Level:           DiagnosticLogLevelInfo,
+		EventType:       DiagnosticLogEventTypeSuccess,
+		Message:         bilingualText(fmt.Sprintf("已采集 %s 目录清单到 %s", category, localPath), fmt.Sprintf("Collected %s directory manifest to %s", category, localPath)),
+		CommandSummary:  category,
+		CreatedAt:       time.Now().UTC(),
+	})
+}
+
+type diagnosticConfigHighlightSpec struct {
+	Label string
+	Paths []string
+}
+
+func extractDiagnosticConfigHighlights(configType, remotePath, content string) []diagnosticConfigKeyValue {
+	switch strings.TrimSpace(strings.ToLower(configType)) {
+	case strings.ToLower(string(appconfig.ConfigTypeSeatunnel)),
+		strings.ToLower(string(appconfig.ConfigTypeHazelcast)),
+		strings.ToLower(string(appconfig.ConfigTypeHazelcastMaster)),
+		strings.ToLower(string(appconfig.ConfigTypeHazelcastWorker)),
+		strings.ToLower(string(appconfig.ConfigTypeHazelcastClient)):
+		return extractDiagnosticYAMLHighlights(configType, content)
+	case "jvm_options", "jvm_master_options", "jvm_worker_options", "jvm_client_options":
+		return extractDiagnosticJVMOptionHighlights(content)
+	case "log4j2.properties", "log4j2_client.properties":
+		return extractDiagnosticLog4jHighlights(content)
+	case "plugin_config":
+		return extractDiagnosticPluginConfigHighlights(remotePath, content)
+	default:
+		return nil
+	}
+}
+
+func extractDiagnosticYAMLHighlights(configType, content string) []diagnosticConfigKeyValue {
+	var payload interface{}
+	if err := yaml.Unmarshal([]byte(content), &payload); err != nil {
+		return nil
+	}
+	flattened := make(map[string]string)
+	flattenDiagnosticConfigValue("", payload, flattened)
+	specs := buildDiagnosticYAMLHighlightSpecs(configType)
+	result := make([]diagnosticConfigKeyValue, 0, len(specs))
+	for _, spec := range specs {
+		value := lookupDiagnosticConfigValue(flattened, spec.Paths...)
+		if value == "" {
+			continue
+		}
+		result = append(result, diagnosticConfigKeyValue{
+			Label: spec.Label,
+			Value: truncateString(normalizeDiagnosticDisplayText(value), 120),
+		})
+	}
+	return result
+}
+
+func flattenDiagnosticConfigValue(prefix string, value interface{}, output map[string]string) {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for key, item := range typed {
+			flattenDiagnosticConfigValue(joinDiagnosticConfigPath(prefix, key), item, output)
+		}
+	case map[interface{}]interface{}:
+		for key, item := range typed {
+			flattenDiagnosticConfigValue(joinDiagnosticConfigPath(prefix, fmt.Sprint(key)), item, output)
+		}
+	case []interface{}:
+		if prefix == "" {
+			return
+		}
+		scalars := make([]string, 0, len(typed))
+		allScalars := true
+		for _, item := range typed {
+			switch item.(type) {
+			case map[string]interface{}, map[interface{}]interface{}, []interface{}:
+				allScalars = false
+			default:
+				scalars = append(scalars, strings.TrimSpace(fmt.Sprint(item)))
+			}
+		}
+		if allScalars {
+			output[strings.ToLower(prefix)] = summarizeDiagnosticScalarList(scalars)
+			return
+		}
+		for index, item := range typed {
+			flattenDiagnosticConfigValue(fmt.Sprintf("%s[%d]", prefix, index), item, output)
+		}
+	default:
+		if prefix == "" {
+			return
+		}
+		output[strings.ToLower(prefix)] = strings.TrimSpace(fmt.Sprint(value))
+	}
+}
+
+func joinDiagnosticConfigPath(prefix, segment string) string {
+	segment = strings.TrimSpace(strings.ToLower(segment))
+	if prefix == "" {
+		return segment
+	}
+	return prefix + "." + segment
+}
+
+func summarizeDiagnosticScalarList(items []string) string {
+	filtered := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		filtered = append(filtered, strings.TrimSpace(item))
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	if len(filtered) <= 4 {
+		return strings.Join(filtered, ", ")
+	}
+	return fmt.Sprintf("%s, ... (%d items)", strings.Join(filtered[:4], ", "), len(filtered))
+}
+
+func lookupDiagnosticConfigValue(flattened map[string]string, paths ...string) string {
+	if len(flattened) == 0 {
+		return ""
+	}
+	for _, path := range paths {
+		normalizedPath := strings.TrimSpace(strings.ToLower(path))
+		if normalizedPath == "" {
+			continue
+		}
+		if value := strings.TrimSpace(flattened[normalizedPath]); value != "" {
+			return value
+		}
+	}
+	for _, path := range paths {
+		normalizedPath := strings.TrimSpace(strings.ToLower(path))
+		if normalizedPath == "" {
+			continue
+		}
+		for key, value := range flattened {
+			if strings.HasSuffix(key, normalizedPath) && strings.TrimSpace(value) != "" {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+func buildDiagnosticYAMLHighlightSpecs(configType string) []diagnosticConfigHighlightSpec {
+	switch strings.TrimSpace(strings.ToLower(configType)) {
+	case strings.ToLower(string(appconfig.ConfigTypeSeatunnel)):
+		return []diagnosticConfigHighlightSpec{
+			{Label: bilingualText("Metrics", "Metrics"), Paths: []string{"metrics.enabled"}},
+			{Label: bilingualText("Prometheus", "Prometheus"), Paths: []string{"metrics.prometheus.enabled"}},
+			{Label: bilingualText("JMX", "JMX"), Paths: []string{"metrics.jmx.enabled"}},
+			{Label: bilingualText("备份副本", "Backup Count"), Paths: []string{"seatunnel.engine.backup-count"}},
+			{Label: bilingualText("Checkpoint 间隔", "Checkpoint Interval"), Paths: []string{"seatunnel.engine.checkpoint.interval"}},
+			{Label: bilingualText("HTTP 端口", "HTTP Port"), Paths: []string{"seatunnel.engine.http.port", "seatunnel.engine.rest.port"}},
+		}
+	case strings.ToLower(string(appconfig.ConfigTypeHazelcast)),
+		strings.ToLower(string(appconfig.ConfigTypeHazelcastMaster)),
+		strings.ToLower(string(appconfig.ConfigTypeHazelcastWorker)):
+		return []diagnosticConfigHighlightSpec{
+			{Label: bilingualText("集群名", "Cluster Name"), Paths: []string{"hazelcast.cluster-name"}},
+			{Label: bilingualText("监听端口", "Listen Port"), Paths: []string{"hazelcast.network.port.port"}},
+			{Label: bilingualText("TCP/IP Join", "TCP/IP Join"), Paths: []string{"hazelcast.network.join.tcp-ip.enabled"}},
+			{Label: bilingualText("Multicast", "Multicast"), Paths: []string{"hazelcast.network.join.multicast.enabled"}},
+			{Label: bilingualText("Partition Group", "Partition Group"), Paths: []string{"hazelcast.partition-group.enabled"}},
+			{Label: bilingualText("CP Member", "CP Member"), Paths: []string{"hazelcast.cp-subsystem.cp-member-count"}},
+		}
+	case strings.ToLower(string(appconfig.ConfigTypeHazelcastClient)):
+		return []diagnosticConfigHighlightSpec{
+			{Label: bilingualText("集群名", "Cluster Name"), Paths: []string{"hazelcast-client.cluster-name"}},
+			{Label: bilingualText("客户端地址", "Client Addresses"), Paths: []string{"hazelcast-client.network.cluster-members", "hazelcast-client.network.addresses"}},
+			{Label: bilingualText("重连模式", "Reconnect Mode"), Paths: []string{"hazelcast-client.connection-strategy.reconnect-mode"}},
+			{Label: bilingualText("异步启动", "Async Start"), Paths: []string{"hazelcast-client.connection-strategy.async-start"}},
+		}
+	default:
+		return nil
+	}
+}
+
+func extractDiagnosticJVMOptionHighlights(content string) []diagnosticConfigKeyValue {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	lineMap := make(map[string]string)
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "-Xms"):
+			lineMap["xms"] = strings.TrimPrefix(line, "-Xms")
+		case strings.HasPrefix(line, "-Xmx"):
+			lineMap["xmx"] = strings.TrimPrefix(line, "-Xmx")
+		case strings.HasPrefix(line, "-XX:MaxDirectMemorySize="):
+			lineMap["direct_memory"] = strings.TrimPrefix(line, "-XX:MaxDirectMemorySize=")
+		case strings.HasPrefix(line, "-XX:MaxMetaspaceSize="):
+			lineMap["metaspace"] = strings.TrimPrefix(line, "-XX:MaxMetaspaceSize=")
+		case strings.HasPrefix(line, "-XX:HeapDumpPath="):
+			lineMap["heap_dump_path"] = strings.TrimPrefix(line, "-XX:HeapDumpPath=")
+		case line == "-XX:+HeapDumpOnOutOfMemoryError":
+			lineMap["heap_dump_on_oom"] = "true"
+		case line == "-XX:+ExitOnOutOfMemoryError":
+			lineMap["exit_on_oom"] = "true"
+		case strings.HasPrefix(line, "-XX:OnOutOfMemoryError="):
+			lineMap["on_oom"] = strings.TrimPrefix(line, "-XX:OnOutOfMemoryError=")
+		}
+	}
+	specs := []struct {
+		key   string
+		label string
+	}{
+		{key: "xms", label: "Xms"},
+		{key: "xmx", label: "Xmx"},
+		{key: "direct_memory", label: bilingualText("直接内存", "Direct Memory")},
+		{key: "metaspace", label: bilingualText("Metaspace", "Metaspace")},
+		{key: "heap_dump_on_oom", label: bilingualText("OOM HeapDump", "OOM HeapDump")},
+		{key: "heap_dump_path", label: bilingualText("HeapDump 路径", "HeapDump Path")},
+		{key: "exit_on_oom", label: bilingualText("OOM 退出", "Exit On OOM")},
+		{key: "on_oom", label: bilingualText("OOM Hook", "OOM Hook")},
+	}
+	result := make([]diagnosticConfigKeyValue, 0, len(specs))
+	for _, spec := range specs {
+		if value := strings.TrimSpace(lineMap[spec.key]); value != "" {
+			result = append(result, diagnosticConfigKeyValue{
+				Label: spec.label,
+				Value: truncateString(value, 120),
+			})
+		}
+	}
+	return result
+}
+
+func extractDiagnosticLog4jHighlights(content string) []diagnosticConfigKeyValue {
+	properties := parseDiagnosticProperties(content)
+	if len(properties) == 0 {
+		return nil
+	}
+	result := make([]diagnosticConfigKeyValue, 0, 4)
+	if level := strings.TrimSpace(properties["rootlogger.level"]); level != "" {
+		result = append(result, diagnosticConfigKeyValue{
+			Label: bilingualText("Root 日志级别", "Root Log Level"),
+			Value: truncateString(level, 120),
+		})
+	}
+	if fileName := firstNonEmptyString(properties["appender.rolling.filename"], properties["appender.file.filename"]); strings.TrimSpace(fileName) != "" {
+		result = append(result, diagnosticConfigKeyValue{
+			Label: bilingualText("主日志文件", "Primary Log File"),
+			Value: truncateString(fileName, 120),
+		})
+	}
+	routingEnabled := false
+	routingPattern := ""
+	for key, value := range properties {
+		if strings.Contains(key, "routing") {
+			routingEnabled = true
+		}
+		if key == "appender.routing.routes.pattern" {
+			routingPattern = value
+		}
+	}
+	if routingEnabled {
+		value := bilingualText("已启用", "enabled")
+		if strings.TrimSpace(routingPattern) != "" {
+			value = truncateString(fmt.Sprintf("%s (%s)", value, routingPattern), 120)
+		}
+		result = append(result, diagnosticConfigKeyValue{
+			Label: bilingualText("RoutingAppender", "RoutingAppender"),
+			Value: value,
+		})
+	}
+	return result
+}
+
+func parseDiagnosticProperties(content string) map[string]string {
+	properties := make(map[string]string)
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
+			continue
+		}
+		index := strings.IndexAny(line, "=:")
+		if index <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(strings.ToLower(line[:index]))
+		value := strings.TrimSpace(line[index+1:])
+		if key == "" || value == "" {
+			continue
+		}
+		properties[key] = value
+	}
+	return properties
+}
+
+func extractDiagnosticPluginConfigHighlights(remotePath, content string) []diagnosticConfigKeyValue {
+	count := 0
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		count++
+	}
+	if count == 0 {
+		return nil
+	}
+	return []diagnosticConfigKeyValue{
+		{
+			Label: bilingualText("插件规则数", "Plugin Rules"),
+			Value: fmt.Sprintf("%d", count),
+		},
+		{
+			Label: bilingualText("来源文件", "Source File"),
+			Value: truncateString(filepath.Base(strings.TrimSpace(remotePath)), 120),
+		},
+	}
+}
+
+func buildDiagnosticExtraConfigFilesForTarget(mode cluster.DeploymentMode, role string) []string {
+	items := []string{
+		"log4j2.properties",
+		"log4j2_client.properties",
+		"plugin_config",
+		"jvm_client_options",
+	}
+	switch mode {
+	case cluster.DeploymentModeSeparated:
+		switch strings.TrimSpace(role) {
+		case string(cluster.NodeRoleMaster):
+			items = append(items, "jvm_master_options")
+		case string(cluster.NodeRoleWorker):
+			items = append(items, "jvm_worker_options")
+		case string(cluster.NodeRoleMasterWorker):
+			items = append(items, "jvm_master_options", "jvm_worker_options")
+		default:
+			items = append(items, "jvm_master_options", "jvm_worker_options")
+		}
+	default:
+		items = append(items, "jvm_options")
+	}
+	return deduplicateDiagnosticStrings(items)
+}
+
+func buildDiagnosticConfigChangeRecords(configs []*appconfig.Config) []diagnosticConfigChangeRecord {
+	if len(configs) == 0 {
+		return []diagnosticConfigChangeRecord{}
+	}
+	result := make([]diagnosticConfigChangeRecord, 0, len(configs))
+	for _, item := range configs {
+		if item == nil {
+			continue
+		}
+		hostID := item.HostID
+		result = append(result, diagnosticConfigChangeRecord{
+			ConfigID:   item.ID,
+			ClusterID:  item.ClusterID,
+			HostID:     hostID,
+			HostScope:  buildDiagnosticConfigChangeScope(item),
+			ConfigType: string(item.ConfigType),
+			FilePath:   item.FilePath,
+			Version:    item.Version,
+			UpdatedAt:  item.UpdatedAt,
+			UpdatedBy:  item.UpdatedBy,
+			IsTemplate: item.IsTemplate(),
+		})
+	}
+	return result
+}
+
+func buildDiagnosticConfigChangeScope(item *appconfig.Config) string {
+	if item == nil {
+		return "-"
+	}
+	if item.IsTemplate() {
+		return "template"
+	}
+	if item.HostID != nil {
+		return fmt.Sprintf("host #%d", *item.HostID)
+	}
+	return "node"
+}
+
+func buildDiagnosticConfigTypesForTarget(mode cluster.DeploymentMode, role string) []appconfig.ConfigType {
+	result := []appconfig.ConfigType{appconfig.ConfigTypeSeatunnel}
+	switch mode {
+	case cluster.DeploymentModeSeparated:
+		switch strings.TrimSpace(role) {
+		case string(cluster.NodeRoleMaster):
+			result = append(result, appconfig.ConfigTypeHazelcastMaster)
+		case string(cluster.NodeRoleWorker):
+			result = append(result, appconfig.ConfigTypeHazelcastWorker)
+		case string(cluster.NodeRoleMasterWorker):
+			result = append(result, appconfig.ConfigTypeHazelcastMaster, appconfig.ConfigTypeHazelcastWorker)
+		default:
+			result = append(result, appconfig.ConfigTypeHazelcastMaster, appconfig.ConfigTypeHazelcastWorker)
+		}
+	default:
+		result = append(result, appconfig.ConfigTypeHazelcast)
+	}
+	result = append(result, appconfig.ConfigTypeHazelcastClient)
+	return deduplicateDiagnosticConfigTypes(result)
+}
+
+func deduplicateDiagnosticConfigTypes(items []appconfig.ConfigType) []appconfig.ConfigType {
+	if len(items) == 0 {
+		return []appconfig.ConfigType{}
+	}
+	result := make([]appconfig.ConfigType, 0, len(items))
+	seen := make(map[appconfig.ConfigType]struct{}, len(items))
+	for _, item := range items {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		result = append(result, item)
+	}
+	return result
+}
+
+func deduplicateDiagnosticStrings(items []string) []string {
+	if len(items) == 0 {
+		return []string{}
+	}
+	result := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		result = append(result, item)
+	}
+	return result
+}
+
+func detectDiagnosticConfigFormat(name string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(name))
+	switch {
+	case strings.HasSuffix(trimmed, ".yaml"), strings.HasSuffix(trimmed, ".yml"):
+		return "yaml"
+	case strings.HasSuffix(trimmed, ".properties"):
+		return "properties"
+	default:
+		return "text"
+	}
+}
+
+func buildDiagnosticContentHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", sum[:8])
 }
 
 func (s *Service) executeCollectLogSampleStep(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep, nodesByClusterNodeID map[uint]*DiagnosticNodeExecution, state *diagnosticBundleExecutionState, bundleDir string) error {
@@ -881,7 +1867,7 @@ func (s *Service) executeAssembleManifestStep(ctx context.Context, task *Diagnos
 		Path:     manifestPath,
 		Message:  bilingualText("诊断包 Manifest", "Diagnostic bundle manifest"),
 	}
-	if err := writeDiagnosticBundleManifestFile(manifestPath, task, append(cloneDiagnosticArtifacts(state.Artifacts), manifestArtifact)); err != nil {
+	if err := writeDiagnosticBundleManifestFile(manifestPath, task, append(cloneDiagnosticArtifacts(state.Artifacts), manifestArtifact), state); err != nil {
 		return err
 	}
 	fileInfo, err := os.Stat(manifestPath)
@@ -925,6 +1911,19 @@ func (s *Service) executeRenderHTMLSummaryStep(ctx context.Context, task *Diagno
 		"toneClass": func(tone interface{}) string {
 			return diagnosticHTMLToneClass(fmt.Sprint(tone))
 		},
+		"formatBytes": func(size int64) string {
+			return formatDiagnosticBytes(size)
+		},
+		"formatMetricValue": func(unit string, value float64) string {
+			return formatDiagnosticMetricValue(unit, value)
+		},
+		"shortHash": func(value string) string {
+			value = strings.TrimSpace(value)
+			if len(value) <= 12 {
+				return value
+			}
+			return value[:12]
+		},
 	}).Parse(diagnosticBundleHTMLTemplate)
 	if err != nil {
 		return err
@@ -943,11 +1942,464 @@ func (s *Service) executeRenderHTMLSummaryStep(ctx context.Context, task *Diagno
 	htmlArtifact.SizeBytes = int64(buffer.Len())
 	state.Artifacts = append(state.Artifacts, htmlArtifact)
 	if task.ManifestPath != "" {
-		if err := writeDiagnosticBundleManifestFile(task.ManifestPath, task, state.Artifacts); err != nil {
+		if err := writeDiagnosticBundleManifestFile(task.ManifestPath, task, state.Artifacts, state); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func resolveDiagnosticCollectionWindow(task *DiagnosticTask, inspectionDetail *ClusterInspectionReportDetailData) diagnosticCollectionWindow {
+	end := time.Now().UTC()
+	lookbackMinutes := 0
+	if inspectionDetail != nil && inspectionDetail.Report != nil {
+		report := inspectionDetail.Report
+		if report.FinishedAt != nil && !report.FinishedAt.IsZero() {
+			end = report.FinishedAt.UTC()
+		} else if report.StartedAt != nil && !report.StartedAt.IsZero() {
+			end = report.StartedAt.UTC()
+		}
+		if report.LookbackMinutes >= minInspectionLookbackMinutes && report.LookbackMinutes <= maxInspectionLookbackMinutes {
+			lookbackMinutes = report.LookbackMinutes
+		}
+	}
+	if task != nil && task.LookbackMinutes >= minInspectionLookbackMinutes && task.LookbackMinutes <= maxInspectionLookbackMinutes {
+		lookbackMinutes = task.LookbackMinutes
+	}
+	if lookbackMinutes == 0 {
+		lookbackMinutes = defaultInspectionLookbackMinutes
+	}
+	start := end.Add(-time.Duration(lookbackMinutes) * time.Minute)
+	return diagnosticCollectionWindow{
+		Start:           start,
+		End:             end,
+		LookbackMinutes: lookbackMinutes,
+	}
+}
+
+func filterDiagnosticProcessEventsByWindow(events []*monitor.ProcessEvent, start, end time.Time) []*monitor.ProcessEvent {
+	if len(events) == 0 {
+		return []*monitor.ProcessEvent{}
+	}
+	filtered := make([]*monitor.ProcessEvent, 0, len(events))
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		createdAt := event.CreatedAt.UTC()
+		if createdAt.Before(start) || createdAt.After(end) {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
+}
+
+func filterDiagnosticAlertsByWindow(alerts []*monitoringapp.AlertInstance, start, end time.Time, sourceAlertID string) []*monitoringapp.AlertInstance {
+	if len(alerts) == 0 {
+		return []*monitoringapp.AlertInstance{}
+	}
+	sourceAlertID = strings.TrimSpace(sourceAlertID)
+	filtered := make([]*monitoringapp.AlertInstance, 0, len(alerts))
+	for _, alert := range alerts {
+		if alert == nil {
+			continue
+		}
+		if sourceAlertID != "" && strings.TrimSpace(alert.AlertID) == sourceAlertID {
+			filtered = append(filtered, alert)
+			continue
+		}
+		if shouldIncludeDiagnosticAlert(alert, start, end) {
+			filtered = append(filtered, alert)
+		}
+	}
+	return filtered
+}
+
+func shouldIncludeDiagnosticAlert(alert *monitoringapp.AlertInstance, start, end time.Time) bool {
+	if alert == nil {
+		return false
+	}
+	switch alert.Status {
+	case monitoringapp.AlertDisplayStatusFiring:
+		firingAt := alert.FiringAt.UTC()
+		lastSeenAt := alert.LastSeenAt.UTC()
+		return !firingAt.After(end) && !lastSeenAt.Before(start)
+	case monitoringapp.AlertDisplayStatusResolved:
+		if alert.ResolvedAt != nil && !alert.ResolvedAt.IsZero() {
+			resolvedAt := alert.ResolvedAt.UTC()
+			return !resolvedAt.Before(start) && !resolvedAt.After(end)
+		}
+		lastSeenAt := alert.LastSeenAt.UTC()
+		return !lastSeenAt.Before(start) && !lastSeenAt.After(end)
+	default:
+		return false
+	}
+}
+
+func timePtr(value time.Time) *time.Time {
+	normalized := value.UTC()
+	return &normalized
+}
+
+type diagnosticPrometheusSignalSpec struct {
+	Key            string
+	Title          string
+	Unit           string
+	Threshold      float64
+	ThresholdText  string
+	StatusOnBreach string
+	Comparator     string
+	PromQL         string
+}
+
+type diagnosticPrometheusQueryRangeResponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ResultType string                                 `json:"resultType"`
+		Result     []diagnosticPrometheusQueryRangeVector `json:"result"`
+	} `json:"data"`
+	Error string `json:"error,omitempty"`
+}
+
+type diagnosticPrometheusQueryRangeVector struct {
+	Metric map[string]string `json:"metric"`
+	Values [][]interface{}   `json:"values"`
+}
+
+func (s *Service) collectDiagnosticPrometheusSnapshot(ctx context.Context, task *DiagnosticTask, window diagnosticCollectionWindow) (*diagnosticPrometheusSnapshot, error) {
+	baseURL := strings.TrimSpace(config.Config.Observability.Prometheus.URL)
+	if baseURL == "" || task == nil || task.ClusterID == 0 {
+		return nil, nil
+	}
+	specs := buildDiagnosticPrometheusSignalSpecs(task.ClusterID)
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	stepSeconds := computeDiagnosticPrometheusStepSeconds(window)
+	snapshot := &diagnosticPrometheusSnapshot{
+		ClusterID:   task.ClusterID,
+		WindowStart: window.Start,
+		WindowEnd:   window.End,
+		StepSeconds: stepSeconds,
+		Signals:     make([]diagnosticPrometheusSignal, 0, len(specs)),
+	}
+	for _, spec := range specs {
+		signal, err := queryDiagnosticPrometheusSignal(ctx, baseURL, window, stepSeconds, spec)
+		if err != nil {
+			snapshot.CollectionNotes = append(snapshot.CollectionNotes, fmt.Sprintf("%s: %v", spec.Key, err))
+			continue
+		}
+		snapshot.Signals = append(snapshot.Signals, *signal)
+	}
+	if len(snapshot.Signals) == 0 && len(snapshot.CollectionNotes) == 0 {
+		return nil, nil
+	}
+	return snapshot, nil
+}
+
+func buildDiagnosticPrometheusSignalSpecs(clusterID uint) []diagnosticPrometheusSignalSpec {
+	matchers := []string{
+		`job="seatunnel_engine_http"`,
+		fmt.Sprintf(`cluster_id="%d"`, clusterID),
+	}
+	oldGenPoolMatcher := `pool=~"G1 Old Gen|PS Old Gen|CMS Old Gen|Tenured Gen"`
+	selector := func(metric string, extra ...string) string {
+		items := make([]string, 0, len(matchers)+len(extra))
+		items = append(items, matchers...)
+		items = append(items, extra...)
+		return buildDiagnosticPrometheusSelector(metric, items...)
+	}
+	return []diagnosticPrometheusSignalSpec{
+		{
+			Key:            "cpu_usage_high",
+			Title:          bilingualText("CPU 负载", "CPU Load"),
+			Unit:           "cores",
+			Threshold:      0.8,
+			ThresholdText:  "> 0.8 cores",
+			StatusOnBreach: "warning",
+			Comparator:     "gt",
+			PromQL:         fmt.Sprintf(`sum by (instance) (rate(%s[5m]))`, selector("process_cpu_seconds_total")),
+		},
+		{
+			Key:            "memory_usage_high",
+			Title:          bilingualText("JVM Heap 使用率", "JVM Heap Usage"),
+			Unit:           "ratio",
+			Threshold:      0.8,
+			ThresholdText:  "> 80%",
+			StatusOnBreach: "warning",
+			Comparator:     "gt",
+			PromQL: fmt.Sprintf(`max by (instance) ((%s) / clamp_min((%s), 1))`,
+				selector("jvm_memory_bytes_used", `area="heap"`),
+				selector("jvm_memory_bytes_max", `area="heap"`),
+			),
+		},
+		{
+			Key:            "fd_usage_high",
+			Title:          bilingualText("FD 使用率", "FD Usage"),
+			Unit:           "ratio",
+			Threshold:      0.8,
+			ThresholdText:  "> 80%",
+			StatusOnBreach: "warning",
+			Comparator:     "gt",
+			PromQL: fmt.Sprintf(`max by (instance) ((%s) / clamp_min((%s), 1))`,
+				selector("process_open_fds"),
+				selector("process_max_fds"),
+			),
+		},
+		{
+			Key:            "old_gen_usage_high",
+			Title:          bilingualText("Old Gen 使用率", "Old Gen Usage"),
+			Unit:           "ratio",
+			Threshold:      0.8,
+			ThresholdText:  "> 80%",
+			StatusOnBreach: "warning",
+			Comparator:     "gt",
+			PromQL: fmt.Sprintf(`max by (instance) ((%s) / clamp_min((%s), 1))`,
+				selector("jvm_memory_pool_bytes_used", oldGenPoolMatcher),
+				selector("jvm_memory_pool_bytes_max", oldGenPoolMatcher),
+			),
+		},
+		{
+			Key:            "gc_time_ratio_high",
+			Title:          bilingualText("GC 时间占比", "GC Time Ratio"),
+			Unit:           "percent",
+			Threshold:      10,
+			ThresholdText:  "> 10% (5m)",
+			StatusOnBreach: "warning",
+			Comparator:     "gt",
+			PromQL:         fmt.Sprintf(`100 * sum by (instance) (rate(%s[5m]))`, selector("jvm_gc_collection_seconds_sum")),
+		},
+		{
+			Key:            "deadlocked_threads_detected",
+			Title:          bilingualText("死锁线程", "Deadlocked Threads"),
+			Unit:           "count",
+			Threshold:      0,
+			ThresholdText:  "> 0",
+			StatusOnBreach: "critical",
+			Comparator:     "gt",
+			PromQL:         fmt.Sprintf(`max by (instance) (%s)`, selector("jvm_threads_deadlocked")),
+		},
+		{
+			Key:            "job_thread_pool_rejection_high",
+			Title:          bilingualText("作业线程池拒绝数", "Job Thread Pool Rejections"),
+			Unit:           "count",
+			Threshold:      0,
+			ThresholdText:  "> 0",
+			StatusOnBreach: "critical",
+			Comparator:     "gt",
+			PromQL:         fmt.Sprintf(`sum by (instance) (increase(%s[5m]))`, selector("job_thread_pool_rejection_total")),
+		},
+		{
+			Key:            "split_brain_risk",
+			Title:          bilingualText("Hazelcast 分区安全", "Hazelcast Partition Safety"),
+			Unit:           "bool",
+			Threshold:      1,
+			ThresholdText:  "< 1",
+			StatusOnBreach: "critical",
+			Comparator:     "lt",
+			PromQL:         fmt.Sprintf(`min by (instance) (%s)`, selector("hazelcast_partition_isClusterSafe")),
+		},
+	}
+}
+
+func queryDiagnosticPrometheusSignal(ctx context.Context, baseURL string, window diagnosticCollectionWindow, stepSeconds int, spec diagnosticPrometheusSignalSpec) (*diagnosticPrometheusSignal, error) {
+	series, err := queryDiagnosticPrometheusRange(ctx, baseURL, spec.PromQL, window.Start, window.End, stepSeconds)
+	if err != nil {
+		return nil, err
+	}
+	summaries := make([]diagnosticPrometheusSeriesSummary, 0, len(series))
+	breachCount := 0
+	for _, item := range series {
+		summary, breached := summarizeDiagnosticPrometheusSeries(item, spec.Comparator, spec.Threshold)
+		if summary.Samples == 0 {
+			continue
+		}
+		summaries = append(summaries, summary)
+		if breached {
+			breachCount++
+		}
+	}
+	sort.SliceStable(summaries, func(i, j int) bool {
+		return compareDiagnosticPrometheusSeries(summaries[i], summaries[j], spec.Comparator)
+	})
+	if len(summaries) > 5 {
+		summaries = summaries[:5]
+	}
+	status := "healthy"
+	summaryText := bilingualText("诊断窗口内未发现明显异常。", "No significant anomaly was detected in the diagnostics window.")
+	if breachCount > 0 {
+		status = spec.StatusOnBreach
+		top := "-"
+		if len(summaries) > 0 {
+			top = summaries[0].Instance
+		}
+		summaryText = bilingualText(
+			fmt.Sprintf("诊断窗口内共有 %d 个实例触达阈值，最突出实例：%s。", breachCount, top),
+			fmt.Sprintf("%d instance(s) breached the threshold in this window, top instance: %s.", breachCount, top),
+		)
+	}
+	return &diagnosticPrometheusSignal{
+		Key:           spec.Key,
+		Title:         spec.Title,
+		Summary:       summaryText,
+		PromQL:        spec.PromQL,
+		Unit:          spec.Unit,
+		Threshold:     spec.Threshold,
+		ThresholdText: spec.ThresholdText,
+		Status:        status,
+		Series:        summaries,
+	}, nil
+}
+
+func queryDiagnosticPrometheusRange(ctx context.Context, baseURL, promQL string, start, end time.Time, stepSeconds int) ([]diagnosticPrometheusQueryRangeVector, error) {
+	apiURL := joinDiagnosticPrometheusURL(baseURL, "/api/v1/query_range")
+	if apiURL == "" {
+		return nil, fmt.Errorf("prometheus url is empty")
+	}
+	params := url.Values{}
+	params.Set("query", promQL)
+	params.Set("start", strconv.FormatFloat(float64(start.UTC().Unix()), 'f', -1, 64))
+	params.Set("end", strconv.FormatFloat(float64(end.UTC().Unix()), 'f', -1, 64))
+	params.Set("step", strconv.Itoa(stepSeconds))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 6 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		payload, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("prometheus query_range status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+	}
+	var payload diagnosticPrometheusQueryRangeResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&payload); err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Status), "success") {
+		return nil, fmt.Errorf("prometheus query_range returned status %q: %s", payload.Status, strings.TrimSpace(payload.Error))
+	}
+	return payload.Data.Result, nil
+}
+
+func summarizeDiagnosticPrometheusSeries(item diagnosticPrometheusQueryRangeVector, comparator string, threshold float64) (diagnosticPrometheusSeriesSummary, bool) {
+	summary := diagnosticPrometheusSeriesSummary{
+		Instance: firstNonEmptyString(strings.TrimSpace(item.Metric["instance"]), strings.TrimSpace(item.Metric["cluster"]), "-"),
+		MinValue: 0,
+		MaxValue: 0,
+	}
+	if len(item.Values) == 0 {
+		return summary, false
+	}
+	first := true
+	breached := false
+	for _, sample := range item.Values {
+		if len(sample) < 2 {
+			continue
+		}
+		value, ok := parseDiagnosticPrometheusSampleValue(sample[1])
+		if !ok {
+			continue
+		}
+		if first {
+			summary.MinValue = value
+			summary.MaxValue = value
+			first = false
+		}
+		if value < summary.MinValue {
+			summary.MinValue = value
+		}
+		if value > summary.MaxValue {
+			summary.MaxValue = value
+		}
+		summary.LastValue = value
+		summary.Samples++
+		switch comparator {
+		case "lt":
+			if value < threshold {
+				breached = true
+			}
+		default:
+			if value > threshold {
+				breached = true
+			}
+		}
+	}
+	return summary, breached
+}
+
+func compareDiagnosticPrometheusSeries(left, right diagnosticPrometheusSeriesSummary, comparator string) bool {
+	switch comparator {
+	case "lt":
+		if left.MinValue != right.MinValue {
+			return left.MinValue < right.MinValue
+		}
+	default:
+		if left.MaxValue != right.MaxValue {
+			return left.MaxValue > right.MaxValue
+		}
+	}
+	return left.Instance < right.Instance
+}
+
+func parseDiagnosticPrometheusSampleValue(value interface{}) (float64, bool) {
+	switch typed := value.(type) {
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		return parsed, err == nil
+	case float64:
+		return typed, true
+	default:
+		return 0, false
+	}
+}
+
+func computeDiagnosticPrometheusStepSeconds(window diagnosticCollectionWindow) int {
+	totalSeconds := int(window.End.Sub(window.Start).Seconds())
+	if totalSeconds <= 0 {
+		return 60
+	}
+	step := totalSeconds / 24
+	if step < 60 {
+		step = 60
+	}
+	if step > 300 {
+		step = 300
+	}
+	return step
+}
+
+func buildDiagnosticPrometheusSelector(metric string, matchers ...string) string {
+	items := make([]string, 0, len(matchers))
+	for _, matcher := range matchers {
+		matcher = strings.TrimSpace(matcher)
+		if matcher == "" {
+			continue
+		}
+		items = append(items, matcher)
+	}
+	if len(items) == 0 {
+		return strings.TrimSpace(metric)
+	}
+	return fmt.Sprintf("%s{%s}", strings.TrimSpace(metric), strings.Join(items, ","))
+}
+
+func joinDiagnosticPrometheusURL(baseURL, suffix string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		return ""
+	}
+	if suffix == "" {
+		return base
+	}
+	if !strings.HasPrefix(suffix, "/") {
+		suffix = "/" + suffix
+	}
+	return base + suffix
 }
 
 func (s *Service) beginDiagnosticTaskStep(ctx context.Context, task *DiagnosticTask, step *DiagnosticTaskStep) error {
@@ -1044,8 +2496,8 @@ func (s *Service) writeDiagnosticJSONArtifact(ctx context.Context, task *Diagnos
 	})
 }
 
-func writeDiagnosticBundleManifestFile(path string, task *DiagnosticTask, artifacts []*diagnosticBundleArtifact) error {
-	manifest := buildDiagnosticBundleManifest(task, artifacts)
+func writeDiagnosticBundleManifestFile(path string, task *DiagnosticTask, artifacts []*diagnosticBundleArtifact, state *diagnosticBundleExecutionState) error {
+	manifest := buildDiagnosticBundleManifest(task, artifacts, state)
 	payload, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
@@ -1053,25 +2505,39 @@ func writeDiagnosticBundleManifestFile(path string, task *DiagnosticTask, artifa
 	return os.WriteFile(path, payload, 0o644)
 }
 
-func buildDiagnosticBundleManifest(task *DiagnosticTask, artifacts []*diagnosticBundleArtifact) *diagnosticBundleManifest {
+func buildDiagnosticBundleManifest(task *DiagnosticTask, artifacts []*diagnosticBundleArtifact, state *diagnosticBundleExecutionState) *diagnosticBundleManifest {
 	if task == nil {
 		return nil
 	}
+	window := resolveDiagnosticCollectionWindow(task, nil)
+	if state != nil {
+		if state.WindowStart != nil && !state.WindowStart.IsZero() {
+			window.Start = state.WindowStart.UTC()
+		}
+		if state.WindowEnd != nil && !state.WindowEnd.IsZero() {
+			window.End = state.WindowEnd.UTC()
+		}
+		if state.LookbackMinutes > 0 {
+			window.LookbackMinutes = state.LookbackMinutes
+		}
+		if state.InspectionDetail != nil {
+			window = resolveDiagnosticCollectionWindow(task, state.InspectionDetail)
+		}
+	}
 	return &diagnosticBundleManifest{
-		Version:       "v1",
-		TaskID:        task.ID,
-		ClusterID:     task.ClusterID,
-		TriggerSource: task.TriggerSource,
-		SourceRef:     task.SourceRef,
-		Options:       task.Options.Normalize(),
-		Status:        task.Status,
-		Summary:       task.Summary,
-		CreatedBy:     task.CreatedBy,
-		CreatedByName: task.CreatedByName,
-		StartedAt:     task.StartedAt,
-		CompletedAt:   task.CompletedAt,
-		GeneratedAt:   time.Now().UTC(),
-		Artifacts:     cloneDiagnosticArtifacts(artifacts),
+		Version:         "v2",
+		TaskID:          task.ID,
+		ClusterID:       task.ClusterID,
+		TriggerSource:   task.TriggerSource,
+		SourceRef:       task.SourceRef,
+		Options:         task.Options.Normalize(),
+		Status:          task.Status,
+		Summary:         task.Summary,
+		LookbackMinutes: window.LookbackMinutes,
+		WindowStart:     timePtr(window.Start),
+		WindowEnd:       timePtr(window.End),
+		GeneratedAt:     time.Now().UTC(),
+		Artifacts:       cloneDiagnosticArtifacts(artifacts),
 	}
 }
 
@@ -1110,6 +2576,8 @@ func buildDiagnosticBundleHTMLPayload(task *DiagnosticTask, state *diagnosticBun
 	payload.ErrorContext = buildDiagnosticBundleHTMLErrorPanel(state.ErrorGroup, state.ErrorEvents)
 	payload.AlertSnapshot = buildDiagnosticBundleHTMLAlertPanel(state.AlertSnapshot)
 	payload.ProcessEvents = buildDiagnosticBundleHTMLProcessPanel(state.ProcessEvents)
+	payload.ConfigSnapshot = buildDiagnosticBundleHTMLConfigPanel(state.ConfigSnapshot)
+	payload.MetricsSnapshot = buildDiagnosticBundleHTMLMetricsPanel(state.MetricsSnapshot)
 	payload.Recommendations = buildDiagnosticBundleHTMLRecommendations(task, state)
 	payload.PassedChecks = buildDiagnosticBundleHTMLPassedChecks(task, state, artifacts)
 	return payload
@@ -1258,7 +2726,20 @@ func buildDiagnosticBundleHTMLErrorPanel(group *SeatunnelErrorGroup, events []*S
 		panel.LastSeenAt = &group.LastSeenAt
 		panel.SampleMessage = normalizeDiagnosticDisplayText(group.SampleMessage)
 	}
-	for _, event := range events {
+	sortedEvents := make([]*SeatunnelErrorEvent, 0, len(events))
+	sortedEvents = append(sortedEvents, events...)
+	sort.SliceStable(sortedEvents, func(i, j int) bool {
+		left := sortedEvents[i]
+		right := sortedEvents[j]
+		if left == nil || right == nil {
+			return left != nil
+		}
+		if !left.OccurredAt.Equal(right.OccurredAt) {
+			return left.OccurredAt.Before(right.OccurredAt)
+		}
+		return left.ID < right.ID
+	})
+	for _, event := range sortedEvents {
 		if event == nil {
 			continue
 		}
@@ -1347,6 +2828,64 @@ func buildDiagnosticBundleHTMLProcessPanel(events []*monitor.ProcessEvent) *diag
 	return panel
 }
 
+func buildDiagnosticBundleHTMLConfigPanel(summary *diagnosticConfigSnapshotSummary) *diagnosticBundleHTMLConfigPanel {
+	if summary == nil {
+		return nil
+	}
+	recentChanges := append([]diagnosticConfigChangeRecord(nil), summary.ConfigChanges...)
+	remainingChanges := []diagnosticConfigChangeRecord{}
+	if len(recentChanges) > 8 {
+		remainingChanges = append(remainingChanges, recentChanges[8:]...)
+		recentChanges = recentChanges[:8]
+	}
+	return &diagnosticBundleHTMLConfigPanel{
+		FileCount:          len(summary.Files),
+		KeyHighlightCount:  len(summary.KeyHighlights),
+		DirectoryCount:     len(summary.DirectoryManifests),
+		ChangedConfigCount: len(summary.ConfigChanges),
+		KeyHighlights:      append([]diagnosticConfigKeyHighlight(nil), summary.KeyHighlights...),
+		RecentChanges:      recentChanges,
+		RemainingChanges:   remainingChanges,
+		Files:              summary.Files,
+		DirectoryManifests: summary.DirectoryManifests,
+		ConfigChanges:      summary.ConfigChanges,
+		CollectionNotes:    summary.CollectionNotes,
+	}
+}
+
+func buildDiagnosticBundleHTMLMetricsPanel(snapshot *diagnosticPrometheusSnapshot) *diagnosticBundleHTMLMetricsPanel {
+	if snapshot == nil || (len(snapshot.Signals) == 0 && len(snapshot.CollectionNotes) == 0) {
+		return nil
+	}
+	highlighted := make([]diagnosticPrometheusSignal, 0, len(snapshot.Signals))
+	additional := make([]diagnosticPrometheusSignal, 0, len(snapshot.Signals))
+	anomalyCount := 0
+	for _, signal := range snapshot.Signals {
+		if strings.EqualFold(strings.TrimSpace(signal.Status), "healthy") || strings.TrimSpace(signal.Status) == "" {
+			additional = append(additional, signal)
+			continue
+		}
+		anomalyCount++
+		highlighted = append(highlighted, signal)
+	}
+	if len(highlighted) == 0 {
+		highlighted = append(highlighted, snapshot.Signals...)
+		if len(highlighted) > 3 {
+			additional = append([]diagnosticPrometheusSignal(nil), highlighted[3:]...)
+			highlighted = append([]diagnosticPrometheusSignal(nil), highlighted[:3]...)
+		} else {
+			additional = []diagnosticPrometheusSignal{}
+		}
+	}
+	return &diagnosticBundleHTMLMetricsPanel{
+		SignalCount:        len(snapshot.Signals),
+		AnomalyCount:       anomalyCount,
+		HighlightedSignals: highlighted,
+		AdditionalSignals:  additional,
+		CollectionNotes:    append([]string(nil), snapshot.CollectionNotes...),
+	}
+}
+
 func buildDiagnosticBundleHTMLExecutionPanel(task *DiagnosticTask) diagnosticBundleHTMLExecutionPanel {
 	panel := diagnosticBundleHTMLExecutionPanel{
 		Steps: []diagnosticBundleHTMLExecutionStep{},
@@ -1425,11 +2964,18 @@ func buildDiagnosticBundleHTMLHealthSummary(task *DiagnosticTask, state *diagnos
 		}
 		// 仅保留与“时间范围 + 发现数”直接相关的少量指标
 		windowLabel := fmt.Sprintf("%d min", firstNonZeroInt(report.LookbackMinutes, defaultInspectionLookbackMinutes))
+		windowNote := ""
+		if state.WindowStart != nil && state.WindowEnd != nil {
+			windowNote = bilingualText(
+				fmt.Sprintf("%s ~ %s", formatDiagnosticBundleTime(state.WindowStart), formatDiagnosticBundleTime(state.WindowEnd)),
+				fmt.Sprintf("%s ~ %s", formatDiagnosticBundleTime(state.WindowStart), formatDiagnosticBundleTime(state.WindowEnd)),
+			)
+		}
 		summary.Metrics = append(summary.Metrics,
 			diagnosticBundleHTMLMetricCard{
 				Label: bilingualText("时间范围", "Time Window"),
 				Value: windowLabel,
-				Note:  "",
+				Note:  windowNote,
 			},
 			diagnosticBundleHTMLMetricCard{
 				Label: bilingualText("发现统计", "Findings"),
@@ -1440,11 +2986,40 @@ func buildDiagnosticBundleHTMLHealthSummary(task *DiagnosticTask, state *diagnos
 				),
 			},
 		)
+		if state.MetricsSnapshot != nil {
+			anomalyCount := 0
+			for _, signal := range state.MetricsSnapshot.Signals {
+				if strings.TrimSpace(signal.Status) != "" && !strings.EqualFold(signal.Status, "healthy") {
+					anomalyCount++
+				}
+			}
+			summary.Metrics = append(summary.Metrics, diagnosticBundleHTMLMetricCard{
+				Label: bilingualText("指标信号", "Metric Signals"),
+				Value: fmt.Sprintf("%d", len(state.MetricsSnapshot.Signals)),
+				Note: bilingualText(
+					fmt.Sprintf("异常信号 %d", anomalyCount),
+					fmt.Sprintf("%d anomalous signal(s)", anomalyCount),
+				),
+			})
+		}
 	} else {
 		// 无巡检上下文时，仅给出非常简短的概览
 		clusterLabel := "-"
-		if task != nil && task.ClusterID > 0 {
+		switch {
+		case state != nil && state.ClusterSnapshot != nil && strings.TrimSpace(state.ClusterSnapshot.Name) != "":
+			clusterLabel = state.ClusterSnapshot.Name
+		case task != nil && task.ClusterID > 0:
 			clusterLabel = fmt.Sprintf("#%d", task.ClusterID)
+		}
+		window := resolveDiagnosticCollectionWindow(task, nil)
+		if state != nil {
+			if state.WindowStart != nil && state.WindowEnd != nil {
+				window.Start = state.WindowStart.UTC()
+				window.End = state.WindowEnd.UTC()
+			}
+			if state.LookbackMinutes > 0 {
+				window.LookbackMinutes = state.LookbackMinutes
+			}
 		}
 		summary.Title = bilingualText("诊断报告已生成", "Diagnostic report generated")
 		summary.Summary = bilingualText(
@@ -1457,7 +3032,31 @@ func buildDiagnosticBundleHTMLHealthSummary(task *DiagnosticTask, state *diagnos
 				Value: clusterLabel,
 				Note:  "",
 			},
+			diagnosticBundleHTMLMetricCard{
+				Label: bilingualText("时间范围", "Time Window"),
+				Value: fmt.Sprintf("%d min", window.LookbackMinutes),
+				Note: bilingualText(
+					fmt.Sprintf("%s ~ %s", formatDiagnosticBundleTimeValue(window.Start), formatDiagnosticBundleTimeValue(window.End)),
+					fmt.Sprintf("%s ~ %s", formatDiagnosticBundleTimeValue(window.Start), formatDiagnosticBundleTimeValue(window.End)),
+				),
+			},
 		)
+		if state != nil && state.MetricsSnapshot != nil {
+			anomalyCount := 0
+			for _, signal := range state.MetricsSnapshot.Signals {
+				if strings.TrimSpace(signal.Status) != "" && !strings.EqualFold(signal.Status, "healthy") {
+					anomalyCount++
+				}
+			}
+			summary.Metrics = append(summary.Metrics, diagnosticBundleHTMLMetricCard{
+				Label: bilingualText("指标信号", "Metric Signals"),
+				Value: fmt.Sprintf("%d", len(state.MetricsSnapshot.Signals)),
+				Note: bilingualText(
+					fmt.Sprintf("异常信号 %d", anomalyCount),
+					fmt.Sprintf("%d anomalous signal(s)", anomalyCount),
+				),
+			})
+		}
 	}
 	return summary
 }
@@ -1476,7 +3075,9 @@ func buildDiagnosticBundleHTMLArtifactGroups(bundleDir string, artifacts []*diag
 	}
 	order := []string{
 		"error_context",
+		"metrics_snapshot",
 		"config_snapshot",
+		"directory_inventory",
 		"alert_snapshot",
 		"process_events",
 		"log_sample",
@@ -1596,8 +3197,8 @@ func buildDiagnosticBundleHTMLPassedChecks(task *DiagnosticTask, state *diagnost
 	}
 	if artifactCountByCategory["config_snapshot"] > 0 {
 		appendAdvice(
-			bilingualText("配置快照已采集", "Configuration snapshot collected"),
-			bilingualText("报告已附带集群配置与运行环境快照。", "The report contains configuration and runtime snapshots."),
+			bilingualText("运行配置文件已采集", "Runtime config files collected"),
+			bilingualText("报告已附带 seatunnel.yaml、hazelcast 配置等运行配置文件快照。", "The report contains runtime config snapshots such as seatunnel.yaml and Hazelcast configs."),
 		)
 	}
 	if artifactCountByCategory["log_sample"] > 0 {
@@ -1662,7 +3263,11 @@ func resolveDiagnosticArtifactCategoryLabel(category string) string {
 	case "alert_snapshot":
 		return bilingualText("告警快照", "Alert Snapshot")
 	case "config_snapshot":
-		return bilingualText("配置快照", "Config Snapshot")
+		return bilingualText("运行配置文件", "Runtime Config Files")
+	case "directory_inventory":
+		return bilingualText("目录清单", "Directory Inventory")
+	case "metrics_snapshot":
+		return bilingualText("指标快照", "Metrics Snapshot")
 	case "log_sample":
 		return bilingualText("日志样本", "Log Sample")
 	case "thread_dump":
@@ -1794,6 +3399,24 @@ func formatDiagnosticBytes(size int64) string {
 		return fmt.Sprintf("%d %s", size, units[unit])
 	}
 	return fmt.Sprintf("%.1f %s", value, units[unit])
+}
+
+func formatDiagnosticMetricValue(unit string, value float64) string {
+	switch strings.TrimSpace(unit) {
+	case "ratio":
+		return fmt.Sprintf("%.1f%%", value*100)
+	case "percent":
+		return fmt.Sprintf("%.1f%%", value)
+	case "cores":
+		return fmt.Sprintf("%.2f", value)
+	case "bool":
+		if value >= 1 {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprintf("%.2f", value)
+	}
 }
 
 func diagnosticHTMLStatusClass(status string) string {
@@ -2399,24 +4022,23 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
     </header>
 
     <nav class="report-nav">
-      <a href="#focus">核心结论</a>
-      <a href="#evidence">关键证据</a>
-      <a href="#overview">任务概览</a>
-      <a href="#execution">执行过程</a>
+      <a href="#focus">摘要</a>
+      <a href="#findings">关键发现</a>
+      <a href="#evidence">证据详情</a>
       <a href="#artifacts">诊断产物</a>
-      <a href="#appendix">集群附录</a>
+      <a href="#appendix">附录</a>
     </nav>
 
     <section class="section" id="focus">
       <div class="section-heading">
         <div>
-          <h2>核心结论 / Executive Summary</h2>
-          <p class="section-lead">建议先看当前结论、影响范围和下一步动作，再进入错误明细与产物。</p>
+          <h2>摘要 / Summary</h2>
+          <p class="section-lead">先看本次诊断的整体结论、影响范围和建议动作，再进入关键发现与证据详情。</p>
         </div>
       </div>
       <div class="focus-grid">
         <article class="focus-panel {{toneClass .Health.Tone}}">
-          <div class="focus-label">当前结论 / Current Assessment</div>
+          <div class="focus-label">一句话结论 / Current Assessment</div>
           <h3>{{.Health.Title}}</h3>
           <p>{{.Health.Summary}}</p>
           {{if .ErrorContext}}
@@ -2429,7 +4051,7 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
         </article>
 
         <article class="focus-panel">
-          <div class="focus-label">影响范围 / Impact Scope</div>
+          <div class="focus-label">影响范围 / Impact Summary</div>
           <p>
             {{if .Inspection}}
             巡检窗口：最近 {{.Inspection.LookbackMinutes}} 分钟；共发现 {{.Inspection.CriticalCount}} 严重 / {{.Inspection.WarningCount}} 告警 / {{.Inspection.InfoCount}} 信息。
@@ -2440,7 +4062,7 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
         </article>
 
         <article class="focus-panel">
-          <div class="focus-label">优先动作 / Recommended Next Step</div>
+          <div class="focus-label">建议动作 / Recommended Next Step</div>
           {{if .Recommendations}}
           <ul class="list-clean">
             {{range .Recommendations}}
@@ -2457,11 +4079,49 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
       </div>
     </section>
 
+    <section class="section" id="findings">
+      <div class="section-heading">
+        <div>
+          <h2>关键发现 / Critical Findings</h2>
+          <p class="section-lead">按严重程度优先展示本次诊断最值得先处理的问题。</p>
+        </div>
+      </div>
+      {{if and .Inspection .Inspection.Findings}}
+      <div class="list">
+        {{range .Inspection.Findings}}
+        <div class="entry">
+          <div class="entry-header">
+            <div>
+              <div class="entry-title">{{.CheckName}}</div>
+              <div class="muted small">{{.CheckCode}}</div>
+            </div>
+            <span class="badge {{statusClass .Severity}}">{{.Severity}}</span>
+          </div>
+          {{if .Summary}}<div>{{.Summary}}</div>{{end}}
+          {{if .Evidence}}<div class="muted small" style="margin-top: 6px;">{{.Evidence}}</div>{{end}}
+          {{if .Recommendation}}<div class="muted small" style="margin-top: 6px;">{{.Recommendation}}</div>{{end}}
+        </div>
+        {{end}}
+      </div>
+      {{else if .ErrorContext}}
+      <div class="focus-grid">
+        <article class="focus-panel critical">
+          <div class="focus-label">错误组 / Error Group</div>
+          <h3>{{.ErrorContext.GroupTitle}}</h3>
+          <p>{{.ErrorContext.SampleMessage}}</p>
+          <div class="panel-note">最近窗口内事件数：{{.ErrorContext.RecentEventCount}}</div>
+        </article>
+      </div>
+      {{else}}
+      <div class="empty">当前诊断窗口内没有生成结构化关键发现，请继续查看证据详情确认是否存在偶发问题。 / No structured critical findings were generated in this window.</div>
+      {{end}}
+    </section>
+
     <section class="section" id="evidence">
       <div class="section-heading">
         <div>
-          <h2>关键证据 / Key Evidence</h2>
-          <p class="section-lead">这一部分用于回答“问题是什么、现在是否仍在发生、影响到了哪里”。</p>
+          <h2>证据详情 / Evidence Details</h2>
+          <p class="section-lead">这一部分用于回答“问题是什么、是否仍在发生、影响到了哪里”。</p>
         </div>
       </div>
 
@@ -2516,7 +4176,7 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
         </div>
 
         <div class="detail-panel">
-          <div class="panel-label">巡检结果 / Inspection Summary</div>
+          <div class="panel-label">巡检上下文 / Inspection Context</div>
           {{if .Inspection}}
           <div class="dl">
             <div class="dl-row"><div class="dl-term">Summary</div><div class="dl-value">{{.Inspection.Summary}}</div></div>
@@ -2525,29 +4185,6 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
             <div class="dl-row"><div class="dl-term">Lookback Window</div><div class="dl-value">{{.Inspection.LookbackMinutes}} min</div></div>
             <div class="dl-row"><div class="dl-term">Started At</div><div class="dl-value">{{formatTime .Inspection.StartedAt}}</div></div>
             <div class="dl-row"><div class="dl-term">Finished At</div><div class="dl-value">{{formatTime .Inspection.FinishedAt}}</div></div>
-          </div>
-          <div class="subsection">
-            <div class="subsection-label">结构化发现 / Findings</div>
-            {{if .Inspection.Findings}}
-            <div class="list">
-              {{range .Inspection.Findings}}
-              <div class="entry">
-                <div class="entry-header">
-                  <div>
-                    <div class="entry-title">{{.CheckName}}</div>
-                    <div class="muted small">{{.CheckCode}}</div>
-                  </div>
-                  <span class="badge {{statusClass .Severity}}">{{.Severity}}</span>
-                </div>
-                <div>{{.Summary}}</div>
-                {{if .Evidence}}<div class="muted small" style="margin-top: 6px;">{{.Evidence}}</div>{{end}}
-                {{if .Recommendation}}<div class="muted small" style="margin-top: 6px;">{{.Recommendation}}</div>{{end}}
-              </div>
-              {{end}}
-            </div>
-            {{else}}
-            <div class="empty">No inspection findings were recorded.</div>
-            {{end}}
           </div>
           {{else}}
           <div class="empty">当前诊断报告没有巡检详情上下文。 / No inspection context is attached to this report.</div>
@@ -2626,13 +4263,286 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
           {{end}}
         </div>
       </div>
+
+      <div class="grid-2" style="margin-top: 18px;">
+        <div class="detail-panel">
+          <div class="panel-label">运行配置文件 / Runtime Config Files</div>
+          {{if .ConfigSnapshot}}
+          <div class="stat-grid">
+            <div class="stat-card"><div class="label">Files</div><div class="value">{{.ConfigSnapshot.FileCount}}</div></div>
+            <div class="stat-card"><div class="label">Key Settings</div><div class="value">{{.ConfigSnapshot.KeyHighlightCount}}</div></div>
+            <div class="stat-card"><div class="label">Inventories</div><div class="value">{{.ConfigSnapshot.DirectoryCount}}</div></div>
+            <div class="stat-card"><div class="label">DB Changes</div><div class="value">{{.ConfigSnapshot.ChangedConfigCount}}</div></div>
+          </div>
+          {{if .ConfigSnapshot.KeyHighlights}}
+          <div class="subsection">
+            <div class="subsection-label">关键配置摘要 / Key Runtime Settings</div>
+            <div class="list">
+              {{range .ConfigSnapshot.KeyHighlights}}
+              <div class="entry">
+                <div class="entry-header">
+                  <div>
+                    <div class="entry-title">{{.ConfigType}}</div>
+                    <div class="muted small">{{if .HostName}}{{.HostName}}{{else}}Host #{{.HostID}}{{end}} / {{.Role}}</div>
+                  </div>
+                </div>
+                <div class="muted small"><code class="inline">{{.RemotePath}}</code></div>
+                <div class="dl">
+                  {{range .Items}}
+                  <div class="dl-row">
+                    <div class="dl-term">{{.Label}}</div>
+                    <div class="dl-value">{{.Value}}</div>
+                  </div>
+                  {{end}}
+                </div>
+              </div>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
+          {{if .ConfigSnapshot.RecentChanges}}
+          <div class="subsection">
+            <div class="subsection-label">窗口内变化轨迹 / Change Timeline</div>
+            <div class="list">
+              {{range .ConfigSnapshot.RecentChanges}}
+              <div class="entry">
+                <div class="entry-header">
+                  <div>
+                    <div class="entry-title">{{.ConfigType}}</div>
+                    <div class="muted small">{{.HostScope}} · version {{.Version}}</div>
+                  </div>
+                  <span class="badge">{{formatTime .UpdatedAt}}</span>
+                </div>
+                <div><code class="inline">{{.FilePath}}</code></div>
+              </div>
+              {{end}}
+            </div>
+            {{if .ConfigSnapshot.RemainingChanges}}
+            <details style="margin-top: 12px;">
+              <summary>查看其余配置变更 / View remaining config changes ({{len .ConfigSnapshot.RemainingChanges}})</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Updated At</th>
+                      <th>Config Type</th>
+                      <th>Scope</th>
+                      <th>Version</th>
+                      <th>Path</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{range .ConfigSnapshot.RemainingChanges}}
+                    <tr>
+                      <td>{{formatTime .UpdatedAt}}</td>
+                      <td>{{.ConfigType}}</td>
+                      <td>{{.HostScope}}</td>
+                      <td>{{.Version}}</td>
+                      <td><code class="inline">{{.FilePath}}</code></td>
+                    </tr>
+                    {{end}}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+            {{end}}
+          </div>
+          {{end}}
+          {{if .ConfigSnapshot.Files}}
+          <div class="subsection">
+            <details>
+              <summary>查看原始运行配置文件清单 / View raw runtime config files</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Host</th>
+                      <th>Role</th>
+                      <th>Type</th>
+                      <th>Remote Path</th>
+                      <th>Size</th>
+                      <th>Hash</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{range .ConfigSnapshot.Files}}
+                    <tr>
+                      <td>{{if .HostName}}{{.HostName}}{{else}}Host #{{.HostID}}{{end}}</td>
+                      <td>{{.Role}}</td>
+                      <td>{{.ConfigType}}</td>
+                      <td><code class="inline">{{.RemotePath}}</code></td>
+                      <td>{{formatBytes .SizeBytes}}</td>
+                      <td><code class="inline">{{shortHash .ContentHash}}</code></td>
+                    </tr>
+                    {{end}}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+          {{end}}
+          {{if .ConfigSnapshot.DirectoryManifests}}
+          <div class="subsection">
+            <details>
+              <summary>查看目录清单（配置 / 依赖 / 连接器） / View directory inventories</summary>
+              <div class="list" style="margin-top: 12px;">
+                {{range .ConfigSnapshot.DirectoryManifests}}
+                <div class="entry">
+                  <div class="entry-header">
+                    <div class="entry-title">{{.Directory}}</div>
+                    <span class="badge">{{.EntryCount}} entries</span>
+                  </div>
+                  <div class="muted small">Host #{{.HostID}} / {{.Role}}</div>
+                  <div class="table-wrap" style="margin-top: 10px;">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Path</th>
+                          <th>Size</th>
+                          <th>Modified</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {{range .Entries}}
+                        <tr>
+                          <td>{{.Name}}</td>
+                          <td><code class="inline">{{.Path}}</code></td>
+                          <td>{{formatBytes .Size}}</td>
+                          <td>{{formatTime .ModTime}}</td>
+                        </tr>
+                        {{end}}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                {{end}}
+              </div>
+            </details>
+          </div>
+          {{end}}
+          {{if .ConfigSnapshot.CollectionNotes}}
+          <div class="subsection">
+            <details>
+              <summary>查看采集备注 / View collection notes</summary>
+              <div class="list" style="margin-top: 12px;">
+                {{range .ConfigSnapshot.CollectionNotes}}
+                <div class="entry">
+                  <div class="entry-header">
+                    <div class="entry-title">{{if .ConfigType}}{{.ConfigType}}{{else}}note{{end}}</div>
+                    <span class="badge">{{if .Role}}{{.Role}}{{else}}system{{end}}</span>
+                  </div>
+                  <div class="muted small">
+                    {{if .HostID}}Host #{{.HostID}}{{else}}Cluster scope{{end}}
+                  </div>
+                  <div style="margin-top: 6px;">{{.Message}}</div>
+                </div>
+                {{end}}
+              </div>
+            </details>
+          </div>
+          {{end}}
+          {{else}}
+          <div class="empty">未采集到 SeaTunnel 运行配置文件。 / No runtime config files were collected.</div>
+          {{end}}
+        </div>
+
+        <div class="detail-panel">
+          <div class="panel-label">Prometheus 指标快照 / Prometheus Metric Snapshot</div>
+          {{if .MetricsSnapshot}}
+          <div class="stat-grid">
+            <div class="stat-card"><div class="label">Signals</div><div class="value">{{.MetricsSnapshot.SignalCount}}</div></div>
+            <div class="stat-card"><div class="label">Anomalies</div><div class="value">{{.MetricsSnapshot.AnomalyCount}}</div></div>
+          </div>
+          {{if .MetricsSnapshot.CollectionNotes}}
+          <div class="subsection">
+            <div class="subsection-label">采集备注 / Collection Notes</div>
+            <div class="list">
+              {{range .MetricsSnapshot.CollectionNotes}}
+              <div class="entry">
+                <div>{{.}}</div>
+              </div>
+              {{end}}
+            </div>
+          </div>
+          {{end}}
+          <div class="subsection">
+            <div class="subsection-label">优先关注指标 / Prioritized Signals</div>
+            <div class="list">
+            {{range .MetricsSnapshot.HighlightedSignals}}
+            <div class="entry">
+              <div class="entry-header">
+                <div>
+                  <div class="entry-title">{{.Title}}</div>
+                  <div class="muted small">{{.ThresholdText}}</div>
+                </div>
+                <span class="badge {{statusClass .Status}}">{{.Status}}</span>
+              </div>
+              <div>{{.Summary}}</div>
+              {{if .Series}}
+              {{$unit := .Unit}}
+              <div class="table-wrap" style="margin-top: 10px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Instance</th>
+                      <th>Min</th>
+                      <th>Max</th>
+                      <th>Last</th>
+                      <th>Samples</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {{range .Series}}
+                    <tr>
+                      <td>{{.Instance}}</td>
+                      <td>{{formatMetricValue $unit .MinValue}}</td>
+                      <td>{{formatMetricValue $unit .MaxValue}}</td>
+                      <td>{{formatMetricValue $unit .LastValue}}</td>
+                      <td>{{.Samples}}</td>
+                    </tr>
+                    {{end}}
+                  </tbody>
+                </table>
+              </div>
+              {{end}}
+            </div>
+            {{end}}
+            </div>
+          </div>
+          {{if .MetricsSnapshot.AdditionalSignals}}
+          <div class="subsection">
+            <details>
+              <summary>查看其余指标信号 / View remaining signals ({{len .MetricsSnapshot.AdditionalSignals}})</summary>
+              <div class="list" style="margin-top: 12px;">
+                {{range .MetricsSnapshot.AdditionalSignals}}
+                <div class="entry">
+                  <div class="entry-header">
+                    <div>
+                      <div class="entry-title">{{.Title}}</div>
+                      <div class="muted small">{{.ThresholdText}}</div>
+                    </div>
+                    <span class="badge {{statusClass .Status}}">{{.Status}}</span>
+                  </div>
+                  <div>{{.Summary}}</div>
+                </div>
+                {{end}}
+              </div>
+            </details>
+          </div>
+          {{end}}
+          {{else}}
+          <div class="empty">未采集到 Prometheus 指标快照。 / No Prometheus metrics snapshot was collected.</div>
+          {{end}}
+        </div>
+      </div>
     </section>
 
     <section class="section" id="overview">
       <div class="section-heading">
         <div>
-          <h2>任务概览 / Task Overview</h2>
-          <p class="section-lead">回答“这份报告从哪里来、由谁触发、针对哪些节点、采集了哪些能力”。</p>
+          <h2>附录：任务概览 / Appendix: Task Overview</h2>
+          <p class="section-lead">这部分主要用于补充报告来源、采集选项和目标节点，排查时按需查看即可。</p>
         </div>
       </div>
 
@@ -2716,8 +4626,8 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
     <section class="section" id="execution">
       <div class="section-heading">
         <div>
-          <h2>执行过程 / Task Execution</h2>
-          <p class="section-lead">用于确认采集步骤是否完整执行，哪些步骤或节点失败，失败点在哪。</p>
+          <h2>附录：执行过程 / Appendix: Task Execution</h2>
+          <p class="section-lead">用于确认采集步骤是否完整执行、哪些步骤或节点失败；不是报告主体的第一阅读入口。</p>
         </div>
       </div>
       <div class="grid-2">
@@ -2850,7 +4760,7 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
     <section class="section" id="appendix">
       <div class="section-heading">
         <div>
-          <h2>集群附录 / Cluster Appendix</h2>
+          <h2>附录：集群快照 / Appendix: Cluster Snapshot</h2>
           <p class="section-lead">用于补充部署元信息；通常在确认问题后再查阅即可。</p>
         </div>
       </div>

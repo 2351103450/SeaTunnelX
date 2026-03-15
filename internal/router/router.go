@@ -1039,6 +1039,8 @@ func (a *agentCommandSenderAdapter) SendCommand(ctx context.Context, agentID str
 		timeout = 2 * time.Minute
 	case "jvm_dump":
 		timeout = 10 * time.Minute
+	case "pull_config":
+		timeout = 1 * time.Minute
 	}
 
 	// Send command with command-specific timeout
@@ -1085,6 +1087,8 @@ func (a *agentCommandSenderAdapter) stringToCommandType(cmdType string) pb.Comma
 		return pb.CommandType_THREAD_DUMP
 	case "jvm_dump":
 		return pb.CommandType_JVM_DUMP
+	case "pull_config":
+		return pb.CommandType_PULL_CONFIG
 	case "remove_install_dir":
 		return pb.CommandType_REMOVE_INSTALL_DIR
 	default:

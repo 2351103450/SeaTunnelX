@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/seatunnel/seatunnelX/internal/apps/cluster"
+	appconfig "github.com/seatunnel/seatunnelX/internal/apps/config"
 	"github.com/seatunnel/seatunnelX/internal/apps/monitor"
 	monitoringapp "github.com/seatunnel/seatunnelX/internal/apps/monitoring"
 	"github.com/seatunnel/seatunnelX/internal/db"
@@ -63,6 +64,7 @@ type diagnosticAgentCommandSender interface {
 // Service 提供诊断中心初始化数据，并维护 diagnostics 与其他运行时领域之间的边界。
 type Service struct {
 	repo              *Repository
+	configRepo        *appconfig.Repository
 	clusterService    clusterReader
 	hostService       hostReader
 	monitorService    processEventReader
@@ -89,17 +91,29 @@ func (s *Service) ListLogCursorsByAgent(ctx context.Context, agentID string) ([]
 // NewService 使用全局数据库（如果已初始化）创建诊断服务。
 func NewService(clusterService *cluster.Service, monitorService *monitor.Service, monitoringService *monitoringapp.Service) *Service {
 	var repo *Repository
+	var configRepo *appconfig.Repository
 	if db.IsDatabaseInitialized() {
-		repo = NewRepository(db.DB(context.Background()))
+		database := db.DB(context.Background())
+		repo = NewRepository(database)
+		configRepo = appconfig.NewRepository(database)
 	}
-	return NewServiceWithRepository(repo, clusterService, monitorService, monitoringService)
+	return newDiagnosticsService(repo, configRepo, clusterService, monitorService, monitoringService)
 }
 
 // NewServiceWithRepository creates a diagnostics service with an explicit repository.
 // NewServiceWithRepository 使用显式仓储创建诊断服务。
 func NewServiceWithRepository(repo *Repository, clusterService clusterReader, monitorService processEventReader, monitoringService alertInstanceReader) *Service {
+	var configRepo *appconfig.Repository
+	if db.IsDatabaseInitialized() {
+		configRepo = appconfig.NewRepository(db.DB(context.Background()))
+	}
+	return newDiagnosticsService(repo, configRepo, clusterService, monitorService, monitoringService)
+}
+
+func newDiagnosticsService(repo *Repository, configRepo *appconfig.Repository, clusterService clusterReader, monitorService processEventReader, monitoringService alertInstanceReader) *Service {
 	svc := &Service{
 		repo:              repo,
+		configRepo:        configRepo,
 		clusterService:    clusterService,
 		monitorService:    monitorService,
 		monitoringService: monitoringService,
@@ -225,10 +239,6 @@ func (s *Service) IngestSeatunnelError(ctx context.Context, req *IngestSeatunnel
 	}
 
 	fingerprint, normalized, exceptionClass, title := BuildErrorFingerprint(req.Message, req.Evidence)
-	if fingerprint == "" {
-		return fmt.Errorf("%w: fingerprint empty", ErrInvalidSeatunnelErrorRequest)
-	}
-
 	txErr := s.repo.Transaction(ctx, func(tx *Repository) error {
 		cursor, err := tx.GetLogCursor(ctx, req.AgentID, req.InstallDir, req.Role, req.SourceFile)
 		if err != nil && !errors.Is(err, ErrSeatunnelLogCursorNotFound) {
@@ -240,6 +250,24 @@ func (s *Service) IngestSeatunnelError(ctx context.Context, req *IngestSeatunnel
 			} else {
 				return nil
 			}
+		}
+
+		cursorOffset := req.CursorEnd
+		if cursorOffset <= 0 {
+			cursorOffset = req.CursorStart
+		}
+		if fingerprint == "" {
+			return tx.UpsertLogCursor(ctx, &SeatunnelLogCursor{
+				AgentID:        req.AgentID,
+				HostID:         req.HostID,
+				ClusterID:      req.ClusterID,
+				NodeID:         req.NodeID,
+				InstallDir:     req.InstallDir,
+				Role:           req.Role,
+				SourceFile:     req.SourceFile,
+				CursorOffset:   cursorOffset,
+				LastOccurredAt: &req.OccurredAt,
+			})
 		}
 
 		group, err := tx.GetErrorGroupByFingerprint(ctx, fingerprint)
@@ -320,10 +348,6 @@ func (s *Service) IngestSeatunnelError(ctx context.Context, req *IngestSeatunnel
 			return err
 		}
 
-		cursorOffset := req.CursorEnd
-		if cursorOffset <= 0 {
-			cursorOffset = req.CursorStart
-		}
 		return tx.UpsertLogCursor(ctx, &SeatunnelLogCursor{
 			AgentID:        req.AgentID,
 			HostID:         req.HostID,

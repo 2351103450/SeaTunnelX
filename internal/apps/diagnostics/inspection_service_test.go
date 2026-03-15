@@ -204,7 +204,7 @@ func TestServiceEvaluateInspectionFindings_aggregatesManagedSignals(t *testing.T
 		},
 	)
 
-	result, err := service.EvaluateInspectionFindings(ctx, 7, 30*time.Minute)
+	result, err := service.EvaluateInspectionFindings(ctx, 7, 30*time.Minute, defaultInspectionErrorThreshold)
 	if err != nil {
 		t.Fatalf("EvaluateInspectionFindings returned error: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestServiceEvaluateInspectionFindings_usesRecentErrorWindowInsteadOfHistori
 		nil,
 	)
 
-	result, err := service.EvaluateInspectionFindings(ctx, 8, 30*time.Minute)
+	result, err := service.EvaluateInspectionFindings(ctx, 8, 30*time.Minute, 2)
 	if err != nil {
 		t.Fatalf("EvaluateInspectionFindings returned error: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestServiceEvaluateInspectionFindings_respectsCustomLookbackWindow(t *testi
 		nil,
 	)
 
-	shortWindowResult, err := service.EvaluateInspectionFindings(ctx, 11, 10*time.Minute)
+	shortWindowResult, err := service.EvaluateInspectionFindings(ctx, 11, 10*time.Minute, defaultInspectionErrorThreshold)
 	if err != nil {
 		t.Fatalf("EvaluateInspectionFindings short window returned error: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestServiceEvaluateInspectionFindings_respectsCustomLookbackWindow(t *testi
 		t.Fatalf("expected no recent burst within 10 minutes, got %d", shortWindowResult.FindingTotal)
 	}
 
-	longWindowResult, err := service.EvaluateInspectionFindings(ctx, 11, 20*time.Minute)
+	longWindowResult, err := service.EvaluateInspectionFindings(ctx, 11, 20*time.Minute, defaultInspectionErrorThreshold)
 	if err != nil {
 		t.Fatalf("EvaluateInspectionFindings long window returned error: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestServiceEvaluateInspectionFindings_handlesSQLiteOffsetTimestamps(t *test
 		nil,
 	)
 
-	result, err := service.EvaluateInspectionFindings(ctx, 12, 30*time.Minute)
+	result, err := service.EvaluateInspectionFindings(ctx, 12, 30*time.Minute, defaultInspectionErrorThreshold)
 	if err != nil {
 		t.Fatalf("EvaluateInspectionFindings with offset timestamps returned error: %v", err)
 	}
@@ -534,6 +534,7 @@ func TestServiceStartInspection_persistsCompletedReportAndSupportsSeverityFilter
 		ClusterID:       9,
 		TriggerSource:   InspectionTriggerSourceDiagnosticsWorkspace,
 		LookbackMinutes: 60,
+		ErrorThreshold:  4,
 	}, 99, "alice")
 	if err != nil {
 		t.Fatalf("StartInspection returned error: %v", err)
@@ -549,6 +550,9 @@ func TestServiceStartInspection_persistsCompletedReportAndSupportsSeverityFilter
 	}
 	if detail.Report.LookbackMinutes != 60 {
 		t.Fatalf("expected lookback_minutes=60, got %d", detail.Report.LookbackMinutes)
+	}
+	if detail.Report.ErrorThreshold != 4 {
+		t.Fatalf("expected error_threshold=4, got %d", detail.Report.ErrorThreshold)
 	}
 	if !strings.Contains(detail.Report.Summary, "60") {
 		t.Fatalf("expected report summary to include lookback window, got %s", detail.Report.Summary)
@@ -581,6 +585,9 @@ func TestServiceStartInspection_persistsCompletedReportAndSupportsSeverityFilter
 	}
 	if reports.Total != 1 || len(reports.Items) != 1 {
 		t.Fatalf("expected 1 warning-filtered report, got total=%d len=%d", reports.Total, len(reports.Items))
+	}
+	if reports.Items[0].ErrorThreshold != 4 {
+		t.Fatalf("expected listed report error_threshold=4, got %d", reports.Items[0].ErrorThreshold)
 	}
 }
 
@@ -624,5 +631,8 @@ func TestServiceStartInspection_marksFailedReportWhenEvaluationFails(t *testing.
 	}
 	if detail.Report.LookbackMinutes != 15 {
 		t.Fatalf("expected failed report to persist lookback_minutes=15, got %d", detail.Report.LookbackMinutes)
+	}
+	if detail.Report.ErrorThreshold != defaultInspectionErrorThreshold {
+		t.Fatalf("expected failed report to persist default error_threshold=%d, got %d", defaultInspectionErrorThreshold, detail.Report.ErrorThreshold)
 	}
 }

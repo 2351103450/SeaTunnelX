@@ -45,6 +45,10 @@ func (s *Service) StartInspection(ctx context.Context, req *StartClusterInspecti
 	if !ok {
 		return nil, fmt.Errorf("%w: lookback_minutes must be between %d and %d", ErrInvalidInspectionRequest, minInspectionLookbackMinutes, maxInspectionLookbackMinutes)
 	}
+	errorThreshold, ok := normalizeInspectionErrorThreshold(req.ErrorThreshold)
+	if !ok {
+		return nil, fmt.Errorf("%w: error_threshold must be between %d and %d", ErrInvalidInspectionRequest, minInspectionErrorThreshold, maxInspectionErrorThreshold)
+	}
 	if _, err := s.clusterService.Get(ctx, req.ClusterID); err != nil {
 		return nil, err
 	}
@@ -55,6 +59,7 @@ func (s *Service) StartInspection(ctx context.Context, req *StartClusterInspecti
 		Status:            InspectionReportStatusRunning,
 		TriggerSource:     triggerSource,
 		LookbackMinutes:   lookbackMinutes,
+		ErrorThreshold:    errorThreshold,
 		RequestedByUserID: requestedByUserID,
 		RequestedBy:       truncateString(strings.TrimSpace(requestedBy), 120),
 		StartedAt:         &startedAt,
@@ -63,7 +68,7 @@ func (s *Service) StartInspection(ctx context.Context, req *StartClusterInspecti
 		return nil, err
 	}
 
-	result, err := s.EvaluateInspectionFindings(ctx, req.ClusterID, time.Duration(lookbackMinutes)*time.Minute)
+	result, err := s.EvaluateInspectionFindings(ctx, req.ClusterID, time.Duration(lookbackMinutes)*time.Minute, errorThreshold)
 	if err != nil {
 		return s.failInspectionReport(ctx, report, err)
 	}
