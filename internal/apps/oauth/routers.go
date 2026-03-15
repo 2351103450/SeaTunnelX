@@ -26,9 +26,11 @@ package oauth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -36,12 +38,56 @@ import (
 	"github.com/seatunnel/seatunnelX/internal/apps/auth"
 	"github.com/seatunnel/seatunnelX/internal/db"
 	"github.com/seatunnel/seatunnelX/internal/logger"
-	"github.com/seatunnel/seatunnelX/internal/session"
 )
 
 type GetLoginURLResponse struct {
 	ErrorMsg string `json:"error_msg"`
 	Data     string `json:"data"`
+}
+
+func loadOAuthPendingStates(ginSession sessions.Session) map[string]int64 {
+	rawValue, ok := ginSession.Get(OAuthPendingStatesSessionKey).(string)
+	if !ok || strings.TrimSpace(rawValue) == "" {
+		return map[string]int64{}
+	}
+
+	var states map[string]int64
+	if err := json.Unmarshal([]byte(rawValue), &states); err != nil {
+		return map[string]int64{}
+	}
+	if states == nil {
+		return map[string]int64{}
+	}
+	return states
+}
+
+func pruneOAuthPendingStates(states map[string]int64, now time.Time) map[string]int64 {
+	if len(states) == 0 {
+		return map[string]int64{}
+	}
+
+	cleaned := make(map[string]int64, len(states))
+	currentUnix := now.Unix()
+	for state, expiresAt := range states {
+		if expiresAt > currentUnix {
+			cleaned[state] = expiresAt
+		}
+	}
+	return cleaned
+}
+
+func writeOAuthPendingStates(ginSession sessions.Session, states map[string]int64) error {
+	if len(states) == 0 {
+		ginSession.Delete(OAuthPendingStatesSessionKey)
+		return nil
+	}
+
+	payload, err := json.Marshal(states)
+	if err != nil {
+		return err
+	}
+	ginSession.Set(OAuthPendingStatesSessionKey, string(payload))
+	return nil
 }
 
 // GetLoginURL godoc
@@ -76,11 +122,17 @@ func GetLoginURL(c *gin.Context) {
 
 	// 生成 state，包含 provider 信息
 	state := fmt.Sprintf("%s:%s", provider, uuid.NewString())
-	key := fmt.Sprintf(OAuthStateCacheKeyFormat, state)
 
-	// 存储 State 到会话存储（支持内存或 Redis）
-	err = session.Store.Set(c.Request.Context(), key, state, OAuthStateCacheKeyExpiration)
-	if err != nil {
+	// 使用 Gin cookie session 存储待校验的 OAuth state，保证多实例下也可校验。
+	ginSession := sessions.Default(c)
+	now := time.Now()
+	pendingStates := pruneOAuthPendingStates(loadOAuthPendingStates(ginSession), now)
+	pendingStates[state] = now.Add(OAuthStateCacheKeyExpiration).Unix()
+	if err := writeOAuthPendingStates(ginSession, pendingStates); err != nil {
+		c.JSON(http.StatusInternalServerError, GetLoginURLResponse{ErrorMsg: err.Error()})
+		return
+	}
+	if err := ginSession.Save(); err != nil {
 		c.JSON(http.StatusInternalServerError, GetLoginURLResponse{ErrorMsg: err.Error()})
 		return
 	}
@@ -113,16 +165,24 @@ func Callback(c *gin.Context) {
 		return
 	}
 
-	// check state（使用会话存储，支持内存或 Redis）
-	key := fmt.Sprintf(OAuthStateCacheKeyFormat, req.State)
-	storedState, err := session.Store.Get(c.Request.Context(), key)
-	if err != nil || storedState != req.State {
+	// check state（使用 Gin cookie session，避免多实例/重启场景下丢失）
+	ginSession := sessions.Default(c)
+	now := time.Now()
+	pendingStates := pruneOAuthPendingStates(loadOAuthPendingStates(ginSession), now)
+	if expiresAt, ok := pendingStates[req.State]; !ok || expiresAt <= now.Unix() {
 		c.JSON(http.StatusBadRequest, CallbackResponse{ErrorMsg: InvalidState})
 		return
 	}
 
-	// 删除已使用的 state
-	_ = session.Store.Delete(c.Request.Context(), key)
+	delete(pendingStates, req.State)
+	if err := writeOAuthPendingStates(ginSession, pendingStates); err != nil {
+		c.JSON(http.StatusInternalServerError, CallbackResponse{ErrorMsg: err.Error()})
+		return
+	}
+	if err := ginSession.Save(); err != nil {
+		c.JSON(http.StatusInternalServerError, CallbackResponse{ErrorMsg: err.Error()})
+		return
+	}
 
 	// 从 state 中解析 provider
 	parts := strings.SplitN(req.State, ":", 2)
@@ -165,7 +225,6 @@ func Callback(c *gin.Context) {
 	}
 
 	// bind to session
-	ginSession := sessions.Default(c)
 	ginSession.Set(UserIDKey, user.ID)
 	ginSession.Set(UserNameKey, user.Username)
 	if err := ginSession.Save(); err != nil {

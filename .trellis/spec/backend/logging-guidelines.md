@@ -15,7 +15,7 @@
 - **Debug**：详细诊断（如 `LoggerMiddleware` 中 Grafana 静态资源请求）。生产环境尽量少用，保持可读性。
 - **Info**：正常操作（如 `LoggerMiddleware` 中的 HTTP 请求/响应、「集群已创建」、「Agent 已连接」）。请求日志默认级别。
 - **Warn**：可恢复或意外但已处理的情况（如配置回退、重试）。
-- **Error**：需要关注的失败（如命令执行失败、关键路径 DB 错误）。用于 worker 中间件和关键路径。
+- **Error**：需要关注的失败（如命令执行失败、关键路径 DB 错误）。用于后台任务入口或关键路径。
 
 使用 `logger.DebugF(ctx, "format", args...)`、`logger.InfoF(ctx, "format", args...)`，以及 `WarnF` / `ErrorF`。context 用于将 trace ID、span ID 附加到日志（见 `logger/utils.go`）。
 
@@ -51,7 +51,7 @@
 
 - **请求路径中**：使用 `logger.InfoF(c.Request.Context(), "消息 %s", arg)`（或从已有 `ctx` 的 handler/service 传入）。
 - **新方法/主类**：会打日志或调 repository、其他 service 的，**首参定为 `ctx context.Context`**，从 handler/gRPC 一路传下去，打日志用该 `ctx`；不要在中途改用 `context.Background()`（除非已脱离请求，如后台任务入口）。
-- **后台/worker**：传入带可选 trace 的 context，同样使用 `logger.*F(ctx, ...)`。
+- **后台任务/legacy 命令壳**：传入带可选 trace 的 context，同样使用 `logger.*F(ctx, ...)`。
 - **初始化**：部分代码仍使用标准 `log` 或 `log.Printf`（如配置、DB 初始化）；在请求链路使用 Zap 之前的启动阶段可以接受。
 
 ---

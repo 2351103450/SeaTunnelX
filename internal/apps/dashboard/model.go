@@ -19,6 +19,13 @@
 // dashboard 包提供 SeaTunnelX 系统的仪表盘统计功能。
 package dashboard
 
+// DashboardDataResponse is the common API envelope used by dashboard handlers.
+// DashboardDataResponse 是 dashboard handler 统一使用的响应结构。
+type DashboardDataResponse struct {
+	ErrorMsg string      `json:"error_msg"`
+	Data     interface{} `json:"data"`
+}
+
 // OverviewStats represents the dashboard overview statistics.
 // OverviewStats 表示仪表盘概览统计数据。
 type OverviewStats struct {
@@ -48,13 +55,13 @@ type OverviewStats struct {
 type ClusterSummary struct {
 	ID             uint   `json:"id"`
 	Name           string `json:"name"`
-	Status         string `json:"status"`           // DB status; display as "unhealthy" when running but 0 online
+	Status         string `json:"status"` // DB status; display as "unhealthy" when running but 0 online
 	DeploymentMode string `json:"deployment_mode"`
 	TotalNodes     int    `json:"total_nodes"`
 	MasterNodes    int    `json:"master_nodes"`
 	WorkerNodes    int    `json:"worker_nodes"`
-	RunningNodes   int    `json:"running_nodes"`   // nodes with status running AND host online
-	OnlineNodes    int    `json:"online_nodes"`    // number of nodes whose host is online
+	RunningNodes   int    `json:"running_nodes"` // nodes with status running AND host online
+	OnlineNodes    int    `json:"online_nodes"`  // number of nodes whose host is online
 }
 
 // HostSummary represents a host summary for dashboard.

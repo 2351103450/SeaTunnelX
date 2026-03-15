@@ -147,7 +147,7 @@ type UploadChunkResponse struct {
 // @Tags packages
 // @Accept multipart/form-data
 // @Produce json
-// @Param file formance file true "安装包文件"
+// @Param file formData file true "安装包文件"
 // @Param version formData string true "版本号"
 // @Success 200 {object} UploadPackageResponse
 // @Router /api/v1/packages/upload [post]

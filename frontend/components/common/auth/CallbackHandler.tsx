@@ -95,7 +95,7 @@ export function CallbackHandler({className, ...props}: CallbackHandlerProps) {
         let errorMessage = t('processingFailed');
 
         if (err instanceof Error) {
-          if (err.message.includes('redis: nil')) {
+          if (err.message.includes('Invalid state')) {
             errorMessage = t('sessionExpired') || '登录会话已过期，请重新登录';
           } else {
             errorMessage = err.message;

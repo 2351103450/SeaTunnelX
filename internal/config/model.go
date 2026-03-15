@@ -19,26 +19,15 @@ package config
 
 type configModel struct {
 	App            AppConfig            `mapstructure:"app"`
-	ProjectApp     projectAppConfig     `mapstructure:"projectApp"`
 	Auth           authConfig           `mapstructure:"auth"`
 	OAuth2         OAuth2Config         `mapstructure:"oauth2"`
 	OAuthProviders OAuthProvidersConfig `mapstructure:"oauth_providers"`
 	Database       DatabaseConfig       `mapstructure:"database"`
-	Redis          RedisConfig          `mapstructure:"redis"`
 	Storage        StorageConfig        `mapstructure:"storage"`
 	GRPC           GRPCConfig           `mapstructure:"grpc"`
 	Log            logConfig            `mapstructure:"log"`
 	Telemetry      TelemetryConfig      `mapstructure:"telemetry"`
 	Observability  ObservabilityConfig  `mapstructure:"observability"`
-	Schedule       scheduleConfig       `mapstructure:"schedule"`
-	Worker         workerConfig         `mapstructure:"worker"`
-	ClickHouse     clickHouseConfig     `mapstructure:"clickhouse"`
-	Legacy         legacyConfig         `mapstructure:"legacy"`
-}
-
-// legacyConfig 旧版配置（保留用于兼容）
-type legacyConfig struct {
-	ApiKey string `mapstructure:"api_key"`
 }
 
 // OAuth2Config OAuth2认证配置（保留用于兼容旧配置）
@@ -88,16 +77,6 @@ type AppConfig struct {
 	ExternalURL string `mapstructure:"external_url"`
 }
 
-// projectAppConfig 项目相关配置
-type projectAppConfig struct {
-	HiddenThreshold        uint8 `mapstructure:"hidden_threshold"`
-	DeductionPerOffense    uint8 `mapstructure:"deduction_per_offense"`
-	CreateProjectRateLimit []struct {
-		IntervalSeconds int `mapstructure:"interval_seconds"`
-		MaxCount        int `mapstructure:"max_count"`
-	} `mapstructure:"create_project_rate_limit"`
-}
-
 // authConfig 认证配置
 type authConfig struct {
 	DefaultAdminUsername string `mapstructure:"default_admin_username"`
@@ -119,34 +98,6 @@ type DatabaseConfig struct {
 	MaxOpenConn     int    `mapstructure:"max_open_conn"`
 	ConnMaxLifetime int    `mapstructure:"conn_max_lifetime"`
 	LogLevel        string `mapstructure:"log_level"`
-}
-
-// clickHouseConfig ClickHouse 配置
-type clickHouseConfig struct {
-	Enabled         bool     `mapstructure:"enabled"`
-	Hosts           []string `mapstructure:"hosts"`
-	Username        string   `mapstructure:"username"`
-	Password        string   `mapstructure:"password"`
-	Database        string   `mapstructure:"database"`
-	MaxIdleConn     int      `mapstructure:"max_idle_conn"`
-	MaxOpenConn     int      `mapstructure:"max_open_conn"`
-	ConnMaxLifetime int      `mapstructure:"conn_max_lifetime"`
-	DialTimeout     int      `mapstructure:"dial_timeout"`
-}
-
-// RedisConfig Redis配置（导出供其他包使用）
-type RedisConfig struct {
-	Enabled      bool   `mapstructure:"enabled"`
-	Host         string `mapstructure:"host"`
-	Port         int    `mapstructure:"port"`
-	Username     string `mapstructure:"username"`
-	Password     string `mapstructure:"password"`
-	DB           int    `mapstructure:"db"`
-	PoolSize     int    `mapstructure:"pool_size"`
-	MinIdleConn  int    `mapstructure:"min_idle_conn"`
-	DialTimeout  int    `mapstructure:"dial_timeout"`
-	ReadTimeout  int    `mapstructure:"read_timeout"`
-	WriteTimeout int    `mapstructure:"write_timeout"`
 }
 
 // GRPCConfig gRPC 服务器配置
@@ -286,16 +237,4 @@ type ObservabilitySeatunnelMetricConfig struct {
 	// ProbeTimeoutSeconds is the timeout for probing one metrics endpoint.
 	// ProbeTimeoutSeconds 是单个 metrics 端点探测超时时间（秒）。
 	ProbeTimeoutSeconds int `mapstructure:"probe_timeout_seconds"`
-}
-
-// scheduleConfig 定时任务配置
-type scheduleConfig struct {
-	UserBadgeScoreDispatchIntervalSeconds int    `mapstructure:"user_badge_score_dispatch_interval_seconds"`
-	UpdateUserBadgeScoresTaskCron         string `mapstructure:"update_user_badges_scores_task_cron"`
-	UpdateAllBadgesTaskCron               string `mapstructure:"update_all_badges_task_cron"`
-}
-
-// workerConfig 工作配置
-type workerConfig struct {
-	Concurrency int `mapstructure:"concurrency"`
 }

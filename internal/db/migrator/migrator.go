@@ -40,7 +40,6 @@ import (
 	"github.com/seatunnel/seatunnelX/internal/apps/monitor"
 	monitoringapp "github.com/seatunnel/seatunnelX/internal/apps/monitoring"
 	"github.com/seatunnel/seatunnelX/internal/apps/plugin"
-	"github.com/seatunnel/seatunnelX/internal/apps/project"
 	"github.com/seatunnel/seatunnelX/internal/apps/stupgrade"
 	"github.com/seatunnel/seatunnelX/internal/config"
 	"github.com/seatunnel/seatunnelX/internal/db"
@@ -64,14 +63,10 @@ func Migrate() {
 	// Execute database table migration, including user table
 	// Note: auth.User is the unified user table, supporting both password and OAuth login
 	if err := db.GetDB(context.Background()).AutoMigrate(
-		&auth.User{},           // 统一用户表（支持密码认证和 OAuth 认证）/ Unified user table
-		&host.Host{},           // 主机管理表 / Host management table
-		&cluster.Cluster{},     // 集群表 / Cluster table
-		&cluster.ClusterNode{}, // 集群节点表 / Cluster node table
-		&project.Project{},     // 项目表 / Project table
-		&project.ProjectItem{}, // 项目条目表 / Project item table
-		&project.ProjectTag{},  // 项目标签表 / Project tag table
-		&project.ProjectReport{},
+		&auth.User{},                            // 统一用户表（支持密码认证和 OAuth 认证）/ Unified user table
+		&host.Host{},                            // 主机管理表 / Host management table
+		&cluster.Cluster{},                      // 集群表 / Cluster table
+		&cluster.ClusterNode{},                  // 集群节点表 / Cluster node table
 		&audit.CommandLog{},                     // 命令日志表 / Command log table
 		&audit.AuditLog{},                       // 审计日志表 / Audit log table
 		&plugin.InstalledPlugin{},               // 已安装插件表 / Installed plugin table
