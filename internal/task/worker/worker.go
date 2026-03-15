@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2025 linux.do
@@ -24,51 +24,12 @@
 
 package worker
 
-import (
-	"context"
-	"github.com/hibiken/asynq"
-	"github.com/seatunnel/seatunnelX/internal/apps/oauth"
-	"github.com/seatunnel/seatunnelX/internal/config"
-	"github.com/seatunnel/seatunnelX/internal/db"
-	"github.com/seatunnel/seatunnelX/internal/task"
-	"github.com/seatunnel/seatunnelX/internal/task/schedule"
-	"time"
-)
+import "errors"
 
-// StartWorker 启动任务处理服务器
+// ErrWorkerRemoved 表示 legacy worker 链路已移除。
+var ErrWorkerRemoved = errors.New("legacy worker mode has been removed from SeaTunnelX")
+
+// StartWorker 保留命令入口，但默认产品已不再提供该 legacy worker 能力。
 func StartWorker() error {
-	exists, err := db.Redis.Exists(context.Background(), oauth.UserAllBadges).Result()
-	if err != nil {
-		return err
-	}
-
-	if exists == 0 {
-		_, errTask := schedule.AsynqClient.Enqueue(asynq.NewTask(task.UpdateAllBadgesTask, nil))
-		if errTask != nil {
-			return errTask
-		}
-	}
-
-	asynqServer := asynq.NewServer(
-		task.RedisOpt,
-		asynq.Config{
-			Concurrency:     config.Config.Worker.Concurrency,
-			ShutdownTimeout: 3 * time.Minute,
-			Queues: map[string]int{
-				"critical": 10,
-				"default":  5,
-				"low":      1,
-			},
-			StrictPriority: true,
-		},
-	)
-
-	// 注册任务处理器
-	mux := asynq.NewServeMux()
-	mux.Use(taskLoggingMiddleware)
-	mux.HandleFunc(task.UpdateAllBadgesTask, oauth.HandleUpdateAllBadges)
-	mux.HandleFunc(task.UpdateUserBadgeScoresTask, oauth.HandleUpdateUserBadgeScores)
-	mux.HandleFunc(task.UpdateSingleUserBadgeScoreTask, oauth.HandleUpdateSingleUserBadgeScore)
-	// 启动服务器
-	return asynqServer.Run(mux)
+	return ErrWorkerRemoved
 }

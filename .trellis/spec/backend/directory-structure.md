@@ -31,7 +31,6 @@ internal/
 │   ├── monitoring/          # 监控中心（告警、Grafana 代理等）
 │   ├── oauth/               # OAuth 提供商（GitHub、Google）
 │   ├── plugin/              # 插件市场、安装到集群
-│   ├── project/             # 项目（外部产品）CRUD
 │   └── task/                # 任务管理
 ├── cmd/                     # 入口（root、api、worker、scheduler）
 ├── config/                  # 全局配置加载与校验
@@ -41,8 +40,8 @@ internal/
 ├── otel_trace/              # OpenTelemetry 追踪
 ├── proto/                   # Protobuf 定义与生成代码（Agent）
 ├── router/                  # Gin 路由、中间件（日志、会话）
-├── session/                 # 会话存储（内存 / Redis）
-├── task/                    # 任务常量、worker、调度
+├── session/                 # 会话存储（默认内存实现）
+├── task/                    # legacy scheduler/worker 壳入口
 └── utils/                   # 共享工具（http_client、自定义类型等）
 ```
 

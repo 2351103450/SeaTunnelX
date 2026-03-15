@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2025 linux.do
@@ -47,7 +47,6 @@ const (
 const (
 	OAuthStateCacheKeyFormat     = "oauth:state:%s"
 	OAuthStateCacheKeyExpiration = 10 * time.Minute
-	UserAllBadges                = "user:badges"
 )
 
 const (

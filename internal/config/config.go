@@ -263,11 +263,6 @@ func GetAuthConfig() authConfig {
 	return Config.Auth
 }
 
-// IsRedisEnabled 检查 Redis 是否启用
-func IsRedisEnabled() bool {
-	return Config.Redis.Enabled
-}
-
 // GetStorageConfig 获取存储配置
 func GetStorageConfig() StorageConfig {
 	return Config.Storage

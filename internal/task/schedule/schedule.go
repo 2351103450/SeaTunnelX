@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2025 linux.do
@@ -24,52 +24,12 @@
 
 package schedule
 
-import (
-	"fmt"
-	"github.com/seatunnel/seatunnelX/internal/config"
-	"github.com/seatunnel/seatunnelX/internal/task"
-	"sync"
-	"time"
+import "errors"
 
-	"github.com/hibiken/asynq"
-)
+// ErrSchedulerRemoved 表示 legacy scheduler 链路已移除。
+var ErrSchedulerRemoved = errors.New("legacy scheduler mode has been removed from SeaTunnelX")
 
-var (
-	AsynqClient   *asynq.Client
-	scheduler     *asynq.Scheduler
-	schedulerOnce sync.Once
-)
-
-func init() {
-	AsynqClient = asynq.NewClient(task.RedisOpt)
-}
-
-// StartScheduler 启动调度器
+// StartScheduler 保留命令入口，但默认产品已不再提供该 legacy 调度能力。
 func StartScheduler() error {
-	var err error
-	schedulerOnce.Do(func() {
-		location, locErr := time.LoadLocation("Asia/Shanghai")
-		if locErr != nil {
-			err = fmt.Errorf("failed to load location: %w", locErr)
-			return
-		}
-		scheduler = asynq.NewScheduler(
-			task.RedisOpt,
-			&asynq.SchedulerOpts{
-				Location: location,
-			},
-		)
-
-		if _, err = scheduler.Register(config.Config.Schedule.UpdateUserBadgeScoresTaskCron, asynq.NewTask(task.UpdateUserBadgeScoresTask, nil)); err != nil {
-			return
-		}
-
-		if _, err = scheduler.Register(config.Config.Schedule.UpdateAllBadgesTaskCron, asynq.NewTask(task.UpdateAllBadgesTask, nil)); err != nil {
-			return
-		}
-
-		// 启动调度器
-		err = scheduler.Run()
-	})
-	return err
+	return ErrSchedulerRemoved
 }

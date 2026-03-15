@@ -49,7 +49,6 @@ import (
 	monitoringapp "github.com/seatunnel/seatunnelX/internal/apps/monitoring"
 	"github.com/seatunnel/seatunnelX/internal/apps/oauth"
 	"github.com/seatunnel/seatunnelX/internal/apps/plugin"
-	"github.com/seatunnel/seatunnelX/internal/apps/project"
 	"github.com/seatunnel/seatunnelX/internal/apps/stupgrade"
 	"github.com/seatunnel/seatunnelX/internal/apps/task"
 	"github.com/seatunnel/seatunnelX/internal/config"
@@ -106,8 +105,8 @@ func Serve() {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
-	// 初始化会话存储（根据配置自动选择内存或 Redis）
-	// Initialize session store (auto-select memory or Redis based on config)
+	// 初始化会话存储（默认使用内存会话）
+	// Initialize session store (uses in-memory sessions by default)
 	if err := session.InitSessionStore(); err != nil {
 		log.Fatalf("[API] 初始化会话存储失败: %v\n", err)
 	}
@@ -145,47 +144,10 @@ func Serve() {
 			apiV1Router.GET("/oauth/login", oauth.GetLoginURL)
 			apiV1Router.POST("/oauth/callback", oauth.Callback)
 
-			// Project
-			projectRouter := apiV1Router.Group("/projects")
-			projectRouter.Use(auth.LoginRequired())
-			{
-				projectRouter.GET("/mine", project.ListMyProjects)
-				projectRouter.GET("", project.ListProjects)
-				projectRouter.POST("", project.ProjectCreateRateLimitMiddleware(), project.CreateProject)
-				projectRouter.PUT("/:id", project.ProjectCreatorPermMiddleware(), project.UpdateProject)
-				projectRouter.DELETE("/:id", project.ProjectCreatorPermMiddleware(), project.DeleteProject)
-				projectRouter.GET("/:id/receivers", project.ProjectCreatorPermMiddleware(), project.ListProjectReceivers)
-				projectRouter.POST("/:id/receive", project.ReceiveProjectMiddleware(), project.ReceiveProject)
-				projectRouter.POST("/:id/report", project.ReportProject)
-				projectRouter.GET("/received", project.ListReceiveHistory)
-				projectRouter.GET("/:id", project.GetProject)
-			}
-
-			// Tag
-			tagRouter := apiV1Router.Group("/tags")
-			tagRouter.Use(auth.LoginRequired())
-			{
-				tagRouter.GET("", project.ListTags)
-			}
-
-			// Dashboard
-			dashboardRouter := apiV1Router.Group("/dashboard")
-			dashboardRouter.Use(auth.LoginRequired())
-			{
-				dashboardRouter.GET("/stats/all", dashboard.GetAllStats)
-			}
-
 			// Admin
 			adminRouter := apiV1Router.Group("/admin")
 			adminRouter.Use(auth.LoginRequired(), admin.LoginAdminRequired())
 			{
-				// Project
-				projectAdminRouter := adminRouter.Group("/projects")
-				{
-					projectAdminRouter.GET("", admin.GetProjectsList)
-					projectAdminRouter.PUT("/:id/review", admin.ReviewProject)
-				}
-
 				// User 用户管理
 				userAdminRouter := adminRouter.Group("/users")
 				{

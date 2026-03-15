@@ -1,69 +1,47 @@
-# Licensed to the Apache Software Foundation (ASF) under one or more
-# contributor license agreements.  See the NOTICE file distributed with
-# this work for additional information regarding copyright ownership.
-# The ASF licenses this file to You under the Apache License, Version 2.0
-# (the "License"); you may not use this file except in compliance with
-# the License.  You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 definitions:
-  admin.ListProjectsResponse:
+  admin.CreateUserRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      is_admin:
+        type: boolean
+      nickname:
+        maxLength: 100
+        type: string
+      password:
+        maxLength: 100
+        minLength: 6
+        type: string
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  admin.CreateUserResponse:
     properties:
       data:
-        $ref: '#/definitions/admin.ListProjectsResponseData'
+        $ref: '#/definitions/auth.UserInfo'
       error_msg:
         type: string
     type: object
-  admin.ListProjectsResponseData:
-    properties:
-      results:
-        items:
-          $ref: '#/definitions/admin.ListProjectsResponseDataResult'
-        type: array
-      total:
-        type: integer
-    type: object
-  admin.ListProjectsResponseDataResult:
-    properties:
-      description:
-        type: string
-      id:
-        type: string
-      nickname:
-        type: string
-      status:
-        $ref: '#/definitions/project.ProjectStatus'
-      tags:
-        items:
-          type: string
-        type: array
-      username:
-        type: string
-    type: object
-  admin.ReviewProjectRequest:
-    properties:
-      status:
-        allOf:
-        - $ref: '#/definitions/project.ProjectStatus'
-        enum:
-        - 0
-        - 1
-        - 2
-    type: object
-  admin.ReviewProjectResponse:
+  admin.DeleteUserResponse:
     properties:
       data: {}
       error_msg:
         type: string
     type: object
-  admin.listUsersResponse:
+  admin.GetUserResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.UserInfo'
+      error_msg:
+        type: string
+    type: object
+  admin.ListUsersResponse:
     properties:
       data:
         properties:
@@ -71,11 +49,785 @@ definitions:
             type: integer
           users:
             items:
-              $ref: '#/definitions/oauth.User'
+              $ref: '#/definitions/auth.UserInfo'
             type: array
         type: object
       error_msg:
         type: string
+    type: object
+  admin.UpdateUserRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      is_active:
+        type: boolean
+      is_admin:
+        type: boolean
+      nickname:
+        maxLength: 100
+        type: string
+      password:
+        maxLength: 100
+        minLength: 6
+        type: string
+    type: object
+  admin.UpdateUserResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.UserInfo'
+      error_msg:
+        type: string
+    type: object
+  agent.ErrorResponse:
+    properties:
+      error_msg:
+        type: string
+    type: object
+  audit.AuditDetails:
+    additionalProperties: true
+    type: object
+  audit.AuditLogInfo:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      details:
+        $ref: '#/definitions/audit.AuditDetails'
+      id:
+        type: integer
+      ip_address:
+        type: string
+      resource_id:
+        type: string
+      resource_name:
+        type: string
+      resource_type:
+        type: string
+      trigger:
+        description: '"auto" | "manual" | ""'
+        type: string
+      user_agent:
+        type: string
+      user_id:
+        type: integer
+      username:
+        type: string
+    type: object
+  audit.CommandLogInfo:
+    properties:
+      agent_id:
+        type: string
+      command_id:
+        type: string
+      command_type:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      error:
+        type: string
+      finished_at:
+        type: string
+      host_id:
+        type: integer
+      id:
+        type: integer
+      output:
+        type: string
+      parameters:
+        $ref: '#/definitions/audit.CommandParameters'
+      progress:
+        type: integer
+      started_at:
+        type: string
+      status:
+        $ref: '#/definitions/audit.CommandStatus'
+    type: object
+  audit.CommandParameters:
+    additionalProperties: true
+    type: object
+  audit.CommandStatus:
+    enum:
+    - pending
+    - running
+    - success
+    - failed
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - CommandStatusPending
+    - CommandStatusRunning
+    - CommandStatusSuccess
+    - CommandStatusFailed
+    - CommandStatusCancelled
+  audit.GetAuditLogResponse:
+    properties:
+      data:
+        $ref: '#/definitions/audit.AuditLogInfo'
+      error_msg:
+        type: string
+    type: object
+  audit.GetCommandLogResponse:
+    properties:
+      data:
+        $ref: '#/definitions/audit.CommandLogInfo'
+      error_msg:
+        type: string
+    type: object
+  audit.ListAuditLogsResponse:
+    properties:
+      data:
+        properties:
+          logs:
+            items:
+              $ref: '#/definitions/audit.AuditLogInfo'
+            type: array
+          total:
+            type: integer
+        type: object
+      error_msg:
+        type: string
+    type: object
+  audit.ListCommandLogsResponse:
+    properties:
+      data:
+        properties:
+          commands:
+            items:
+              $ref: '#/definitions/audit.CommandLogInfo'
+            type: array
+          total:
+            type: integer
+        type: object
+      error_msg:
+        type: string
+    type: object
+  auth.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  auth.LoginResponse:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  auth.LogoutResponse:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  auth.UpdateProfileRequest:
+    properties:
+      email:
+        maxLength: 255
+        type: string
+      language:
+        enum:
+        - zh
+        - en
+        type: string
+    type: object
+  auth.UpdateProfileResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.UserInfo'
+      error_msg:
+        type: string
+    type: object
+  auth.UserInfo:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      is_admin:
+        type: boolean
+      language:
+        type: string
+      last_login_at:
+        type: string
+      nickname:
+        type: string
+      username:
+        type: string
+    type: object
+  auth.UserInfoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/auth.UserInfo'
+      error_msg:
+        type: string
+    type: object
+  cluster.AddNodeRequest:
+    properties:
+      api_port:
+        description: REST API port (Master only, optional) / REST API 端口（仅 Master，可选）
+        type: integer
+      hazelcast_port:
+        description: |-
+          Port configuration based on node role / 基于节点角色的端口配置
+          Master: hazelcast_port (default 5801) + api_port (default 8080, optional)
+          Worker: hazelcast_port (default 5802)
+          Hybrid: hazelcast_port (5801) + worker_port (5802)
+        type: integer
+      host_id:
+        type: integer
+      install_dir:
+        description: SeaTunnel installation directory / SeaTunnel 安装目录
+        type: string
+      overrides:
+        allOf:
+        - $ref: '#/definitions/cluster.NodeOverrides'
+        description: Node-level JSON overrides / 节点级 JSON 覆盖配置
+      role:
+        $ref: '#/definitions/cluster.NodeRole'
+      skip_precheck:
+        description: Whether to skip precheck / 是否跳过预检查
+        type: boolean
+      worker_port:
+        description: Worker hazelcast port (Hybrid only) / Worker Hazelcast 端口（仅混合模式）
+        type: integer
+    required:
+    - host_id
+    - role
+    type: object
+  cluster.AddNodeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.NodeInfo'
+      error_msg:
+        type: string
+    type: object
+  cluster.ClusterConfig:
+    additionalProperties: true
+    type: object
+  cluster.ClusterInfo:
+    properties:
+      config:
+        $ref: '#/definitions/cluster.ClusterConfig'
+      created_at:
+        type: string
+      deployment_mode:
+        $ref: '#/definitions/cluster.DeploymentMode'
+      description:
+        type: string
+      health_status:
+        description: healthy, unhealthy, unknown / 健康状态
+        type: string
+      id:
+        type: integer
+      install_dir:
+        type: string
+      name:
+        type: string
+      node_count:
+        type: integer
+      online_nodes:
+        description: number of nodes whose host is online / 主机在线的节点数
+        type: integer
+      status:
+        $ref: '#/definitions/cluster.ClusterStatus'
+      updated_at:
+        type: string
+      version:
+        type: string
+    type: object
+  cluster.ClusterOperationResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.OperationResult'
+      error_msg:
+        type: string
+    type: object
+  cluster.ClusterStatus:
+    enum:
+    - created
+    - deploying
+    - running
+    - stopped
+    - error
+    type: string
+    x-enum-varnames:
+    - ClusterStatusCreated
+    - ClusterStatusDeploying
+    - ClusterStatusRunning
+    - ClusterStatusStopped
+    - ClusterStatusError
+  cluster.ClusterStatusInfo:
+    properties:
+      cluster_id:
+        type: integer
+      cluster_name:
+        type: string
+      health_status:
+        $ref: '#/definitions/cluster.HealthStatus'
+      nodes:
+        items:
+          $ref: '#/definitions/cluster.NodeStatusInfo'
+        type: array
+      offline_nodes:
+        type: integer
+      online_nodes:
+        type: integer
+      status:
+        $ref: '#/definitions/cluster.ClusterStatus'
+      total_nodes:
+        type: integer
+    type: object
+  cluster.CreateClusterRequest:
+    properties:
+      config:
+        $ref: '#/definitions/cluster.ClusterConfig'
+      deployment_mode:
+        $ref: '#/definitions/cluster.DeploymentMode'
+      description:
+        type: string
+      install_dir:
+        type: string
+      name:
+        maxLength: 100
+        type: string
+      nodes:
+        description: |-
+          Nodes to auto-create from discovery (optional)
+          从发现自动创建的节点（可选）
+        items:
+          $ref: '#/definitions/cluster.CreateNodeFromDiscovery'
+        type: array
+      version:
+        type: string
+    required:
+    - deployment_mode
+    - name
+    - version
+    type: object
+  cluster.CreateClusterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.ClusterInfo'
+      error_msg:
+        type: string
+    type: object
+  cluster.CreateNodeFromDiscovery:
+    properties:
+      api_port:
+        description: REST API port (optional) / REST API 端口（可选）
+        type: integer
+      hazelcast_port:
+        description: Hazelcast cluster port (optional) / Hazelcast 集群端口（可选）
+        type: integer
+      host_id:
+        description: Host ID / 主机 ID
+        type: integer
+      install_dir:
+        description: SeaTunnel installation directory / SeaTunnel 安装目录
+        type: string
+      role:
+        description: 'Node role: master, worker, hybrid / 节点角色'
+        type: string
+    type: object
+  cluster.DeleteClusterResponse:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  cluster.DeploymentMode:
+    enum:
+    - hybrid
+    - separated
+    type: string
+    x-enum-varnames:
+    - DeploymentModeHybrid
+    - DeploymentModeSeparated
+  cluster.GetClusterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.ClusterInfo'
+      error_msg:
+        type: string
+    type: object
+  cluster.GetClusterStatusResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.ClusterStatusInfo'
+      error_msg:
+        type: string
+    type: object
+  cluster.GetNodesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/cluster.NodeInfo'
+        type: array
+      error_msg:
+        type: string
+    type: object
+  cluster.HealthStatus:
+    enum:
+    - healthy
+    - unhealthy
+    - unknown
+    type: string
+    x-enum-varnames:
+    - HealthStatusHealthy
+    - HealthStatusUnhealthy
+    - HealthStatusUnknown
+  cluster.ListClustersResponse:
+    properties:
+      data:
+        properties:
+          clusters:
+            items:
+              $ref: '#/definitions/cluster.ClusterInfo'
+            type: array
+          total:
+            type: integer
+        type: object
+      error_msg:
+        type: string
+    type: object
+  cluster.NodeInfo:
+    properties:
+      api_port:
+        description: REST API port (Master only) / REST API 端口（仅 Master）
+        type: integer
+      cluster_id:
+        type: integer
+      created_at:
+        type: string
+      hazelcast_port:
+        description: Hazelcast cluster port / Hazelcast 集群端口
+        type: integer
+      host_id:
+        type: integer
+      host_ip:
+        type: string
+      host_name:
+        type: string
+      id:
+        type: integer
+      install_dir:
+        description: SeaTunnel installation directory / SeaTunnel 安装目录
+        type: string
+      is_online:
+        description: Whether host is online; when false, status may be shown as offline
+          / 主机是否在线
+        type: boolean
+      overrides:
+        allOf:
+        - $ref: '#/definitions/cluster.NodeOverrides'
+        description: Node-level JSON overrides / 节点级 JSON 覆盖配置
+      process_pid:
+        description: SeaTunnel process PID / SeaTunnel 进程 PID
+        type: integer
+      role:
+        $ref: '#/definitions/cluster.NodeRole'
+      status:
+        allOf:
+        - $ref: '#/definitions/cluster.NodeStatus'
+        description: 'Unified status: pending, installing, running, stopped, error,
+          offline / 统一状态'
+      updated_at:
+        type: string
+      worker_port:
+        description: Worker hazelcast port (Hybrid only) / Worker Hazelcast 端口（仅混合模式）
+        type: integer
+    type: object
+  cluster.NodeJVMOverrides:
+    properties:
+      hybrid_heap_size:
+        type: integer
+      master_heap_size:
+        type: integer
+      worker_heap_size:
+        type: integer
+    type: object
+  cluster.NodeOperationResult:
+    properties:
+      host_id:
+        type: integer
+      host_name:
+        type: string
+      message:
+        type: string
+      node_id:
+        type: integer
+      success:
+        type: boolean
+    type: object
+  cluster.NodeOverrides:
+    properties:
+      jvm:
+        $ref: '#/definitions/cluster.NodeJVMOverrides'
+    type: object
+  cluster.NodeRole:
+    enum:
+    - master
+    - worker
+    - master/worker
+    type: string
+    x-enum-varnames:
+    - NodeRoleMaster
+    - NodeRoleWorker
+    - NodeRoleMasterWorker
+  cluster.NodeStatus:
+    enum:
+    - pending
+    - installing
+    - running
+    - stopped
+    - error
+    - offline
+    type: string
+    x-enum-varnames:
+    - NodeStatusPending
+    - NodeStatusInstalling
+    - NodeStatusRunning
+    - NodeStatusStopped
+    - NodeStatusError
+    - NodeStatusOffline
+  cluster.NodeStatusInfo:
+    properties:
+      host_id:
+        type: integer
+      host_ip:
+        type: string
+      host_name:
+        type: string
+      is_online:
+        description: Whether host is online / 主机是否在线
+        type: boolean
+      node_id:
+        type: integer
+      process_pid:
+        description: SeaTunnel process PID / SeaTunnel 进程 PID
+        type: integer
+      role:
+        $ref: '#/definitions/cluster.NodeRole'
+      status:
+        allOf:
+        - $ref: '#/definitions/cluster.NodeStatus'
+        description: 'Unified status: pending, installing, running, stopped, error
+          / 统一状态'
+    type: object
+  cluster.OperationResult:
+    properties:
+      cluster_id:
+        type: integer
+      message:
+        type: string
+      node_results:
+        items:
+          $ref: '#/definitions/cluster.NodeOperationResult'
+        type: array
+      operation:
+        $ref: '#/definitions/cluster.OperationType'
+      success:
+        type: boolean
+    type: object
+  cluster.OperationType:
+    enum:
+    - start
+    - stop
+    - restart
+    type: string
+    x-enum-varnames:
+    - OperationStart
+    - OperationStop
+    - OperationRestart
+  cluster.PrecheckCheckItem:
+    properties:
+      message:
+        description: Detail message / 详细信息
+        type: string
+      name:
+        description: Check name / 检查名称
+        type: string
+      status:
+        description: passed, failed, skipped / 通过、失败、跳过
+        type: string
+    type: object
+  cluster.PrecheckNodeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.PrecheckResult'
+      error_msg:
+        type: string
+    type: object
+  cluster.PrecheckRequest:
+    properties:
+      api_port:
+        type: integer
+      hazelcast_port:
+        type: integer
+      host_id:
+        type: integer
+      install_dir:
+        type: string
+      role:
+        $ref: '#/definitions/cluster.NodeRole'
+      worker_port:
+        type: integer
+    required:
+    - hazelcast_port
+    - host_id
+    - role
+    type: object
+  cluster.PrecheckResult:
+    properties:
+      checks:
+        items:
+          $ref: '#/definitions/cluster.PrecheckCheckItem'
+        type: array
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  cluster.RemoveNodeResponse:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  cluster.UpdateClusterRequest:
+    properties:
+      config:
+        $ref: '#/definitions/cluster.ClusterConfig'
+      description:
+        type: string
+      install_dir:
+        type: string
+      name:
+        type: string
+      version:
+        type: string
+    type: object
+  cluster.UpdateClusterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/cluster.ClusterInfo'
+      error_msg:
+        type: string
+    type: object
+  cluster.UpdateNodeRequest:
+    properties:
+      api_port:
+        description: REST API port (Master only, optional) / REST API 端口（仅 Master，可选）
+        type: integer
+      hazelcast_port:
+        description: Hazelcast cluster port / Hazelcast 集群端口
+        type: integer
+      install_dir:
+        description: SeaTunnel installation directory / SeaTunnel 安装目录
+        type: string
+      overrides:
+        allOf:
+        - $ref: '#/definitions/cluster.NodeOverrides'
+        description: Node-level JSON overrides / 节点级 JSON 覆盖配置
+      worker_port:
+        description: Worker hazelcast port (Hybrid only) / Worker Hazelcast 端口（仅混合模式）
+        type: integer
+    type: object
+  config.InitClusterConfigsRequest:
+    properties:
+      host_id:
+        type: integer
+      install_dir:
+        type: string
+    required:
+    - host_id
+    - install_dir
+    type: object
+  config.PromoteConfigRequest:
+    properties:
+      comment:
+        type: string
+    type: object
+  config.PushConfigRequest:
+    properties:
+      install_dir:
+        type: string
+    required:
+    - install_dir
+    type: object
+  config.Response:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  config.RollbackConfigRequest:
+    properties:
+      comment:
+        type: string
+      version:
+        type: integer
+    required:
+    - version
+    type: object
+  config.SyncConfigRequest:
+    properties:
+      comment:
+        type: string
+    type: object
+  config.SyncTemplateToAllNodesRequest:
+    properties:
+      config_type:
+        type: string
+    required:
+    - config_type
+    type: object
+  config.UpdateConfigRequest:
+    properties:
+      comment:
+        type: string
+      content:
+        type: string
+    required:
+    - content
+    type: object
+  dashboard.ClusterSummary:
+    properties:
+      deployment_mode:
+        type: string
+      id:
+        type: integer
+      master_nodes:
+        type: integer
+      name:
+        type: string
+      online_nodes:
+        description: number of nodes whose host is online
+        type: integer
+      running_nodes:
+        description: nodes with status running AND host online
+        type: integer
+      status:
+        description: DB status; display as "unhealthy" when running but 0 online
+        type: string
+      total_nodes:
+        type: integer
+      worker_nodes:
+        type: integer
     type: object
   dashboard.DashboardDataResponse:
     properties:
@@ -83,26 +835,1041 @@ definitions:
       error_msg:
         type: string
     type: object
+  dashboard.HostSummary:
+    properties:
+      agent_status:
+        type: string
+      id:
+        type: integer
+      ip_address:
+        type: string
+      is_online:
+        type: boolean
+      name:
+        type: string
+      node_count:
+        type: integer
+    type: object
+  dashboard.OverviewData:
+    properties:
+      cluster_summaries:
+        items:
+          $ref: '#/definitions/dashboard.ClusterSummary'
+        type: array
+      host_summaries:
+        items:
+          $ref: '#/definitions/dashboard.HostSummary'
+        type: array
+      recent_activities:
+        items:
+          $ref: '#/definitions/dashboard.RecentActivity'
+        type: array
+      stats:
+        $ref: '#/definitions/dashboard.OverviewStats'
+    type: object
+  dashboard.OverviewStats:
+    properties:
+      error_clusters:
+        type: integer
+      error_nodes:
+        type: integer
+      online_agents:
+        type: integer
+      online_hosts:
+        type: integer
+      running_clusters:
+        type: integer
+      running_nodes:
+        type: integer
+      stopped_clusters:
+        type: integer
+      stopped_nodes:
+        type: integer
+      total_agents:
+        description: Agent statistics / Agent 统计
+        type: integer
+      total_clusters:
+        description: Cluster statistics / 集群统计
+        type: integer
+      total_hosts:
+        description: Host statistics / 主机统计
+        type: integer
+      total_nodes:
+        description: Node statistics / 节点统计
+        type: integer
+    type: object
+  dashboard.RecentActivity:
+    properties:
+      id:
+        type: integer
+      message:
+        type: string
+      timestamp:
+        type: string
+      type:
+        description: success, warning, info, error
+        type: string
+    type: object
+  deepwiki.DeepWikiError:
+    properties:
+      reason:
+        type: string
+      url:
+        type: string
+    type: object
+  deepwiki.DeepWikiRequest:
+    properties:
+      max_depth:
+        description: |-
+          MaxDepth is the maximum depth of pages to crawl (default: 1)
+          MaxDepth 是爬取页面的最大深度（默认：1）
+        type: integer
+      mode:
+        description: |-
+          Mode is the output mode: "aggregate" (single document) or "pages" (structured)
+          Mode 是输出模式："aggregate"（单文档）或 "pages"（结构化）
+        type: string
+      query:
+        description: |-
+          Query is an optional search query to filter results
+          Query 是可选的搜索查询，用于过滤结果
+        type: string
+      url:
+        description: |-
+          URL is the repository URL or path (e.g., "apache/seatunnel")
+          URL 是仓库地址或路径（如 "apache/seatunnel"）
+        type: string
+    required:
+    - url
+    type: object
+  deepwiki.DeepWikiResponse:
+    properties:
+      code:
+        description: |-
+          Code is the error code (only present on error)
+          Code 是错误代码（仅在错误时存在）
+        type: string
+      data:
+        description: |-
+          Data contains the markdown content (aggregate mode) or page array (pages mode)
+          Data 包含 markdown 内容（aggregate 模式）或页面数组（pages 模式）
+      elapsed_ms:
+        description: |-
+          ElapsedMs is the time taken in milliseconds
+          ElapsedMs 是耗时（毫秒）
+        type: integer
+      errors:
+        description: |-
+          Errors contains any errors encountered during fetching
+          Errors 包含获取过程中遇到的错误
+        items:
+          $ref: '#/definitions/deepwiki.DeepWikiError'
+        type: array
+      message:
+        description: |-
+          Message is the error message (only present on error)
+          Message 是错误消息（仅在错误时存在）
+        type: string
+      status:
+        description: |-
+          Status is the response status: "ok", "partial", or "error"
+          Status 是响应状态："ok"、"partial" 或 "error"
+        type: string
+      total_bytes:
+        description: |-
+          TotalBytes is the total size of fetched content
+          TotalBytes 是获取内容的总大小
+        type: integer
+      total_pages:
+        description: |-
+          TotalPages is the number of pages fetched
+          TotalPages 是获取的页面数量
+        type: integer
+    type: object
+  deepwiki.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+    type: object
+  deepwiki.SearchRequest:
+    properties:
+      query:
+        description: |-
+          Query is the search query
+          Query 是搜索查询
+        type: string
+      repo:
+        description: |-
+          Repo is the repository to search (default: "apache/seatunnel")
+          Repo 是要搜索的仓库（默认："apache/seatunnel"）
+        type: string
+    required:
+    - query
+    type: object
+  deepwiki.SearchResponse:
+    properties:
+      query:
+        description: |-
+          Query is the original search query
+          Query 是原始搜索查询
+        type: string
+      results:
+        description: |-
+          Results contains the search results
+          Results 包含搜索结果
+        type: string
+      source:
+        description: |-
+          Source indicates the data source
+          Source 表示数据来源
+        type: string
+    type: object
+  discovery.ConfirmDiscoveryRequest:
+    properties:
+      cluster_ids:
+        description: 要纳管的集群标识 / Cluster identifiers to manage
+        items:
+          type: string
+        type: array
+      host_id:
+        type: integer
+      install_dirs:
+        description: 要纳管的安装目录 / Install directories to manage
+        items:
+          type: string
+        type: array
+    required:
+    - host_id
+    type: object
+  discovery.DiscoveryResult:
+    properties:
+      clusters:
+        items:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_discovery.DiscoveredCluster'
+        type: array
+      exist_count:
+        type: integer
+      message:
+        type: string
+      new_count:
+        type: integer
+      success:
+        type: boolean
+    type: object
+  discovery.ProcessDiscoveryResult:
+    properties:
+      message:
+        type: string
+      processes:
+        items:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_discovery.DiscoveredProcess'
+        type: array
+      success:
+        type: boolean
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_discovery.DiscoveredCluster:
+    properties:
+      config:
+        additionalProperties: true
+        type: object
+      deployment_mode:
+        type: string
+      discovered_at:
+        type: string
+      existing_id:
+        description: 如果已存在，关联的集群 ID / If exists, the associated cluster ID
+        type: integer
+      install_dir:
+        type: string
+      is_new:
+        description: 是否为新发现的集群 / Whether it's a newly discovered cluster
+        type: boolean
+      name:
+        type: string
+      nodes:
+        items:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_discovery.DiscoveredNode'
+        type: array
+      version:
+        type: string
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_discovery.DiscoveredNode:
+    properties:
+      api_port:
+        type: integer
+      hazelcast_port:
+        type: integer
+      pid:
+        type: integer
+      role:
+        type: string
+      start_time:
+        type: string
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_discovery.DiscoveredProcess:
+    properties:
+      api_port:
+        description: REST API port / REST API 端口
+        type: integer
+      hazelcast_port:
+        description: Hazelcast cluster port / Hazelcast 集群端口
+        type: integer
+      install_dir:
+        description: SeaTunnel installation directory / SeaTunnel 安装目录
+        type: string
+      pid:
+        type: integer
+      role:
+        description: master, worker, or hybrid
+        type: string
+      version:
+        description: SeaTunnel version / SeaTunnel 版本
+        type: string
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.AvailableVersions:
+    properties:
+      local_packages:
+        items:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.PackageInfo'
+        type: array
+      recommended_version:
+        type: string
+      versions:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.CheckStatus:
+    enum:
+    - passed
+    - failed
+    - warning
+    type: string
+    x-enum-varnames:
+    - CheckStatusPassed
+    - CheckStatusFailed
+    - CheckStatusWarning
+  github_com_seatunnel_seatunnelX_internal_apps_installer.CheckpointConfig:
+    properties:
+      hdfs_failover_proxy_provider:
+        type: string
+      hdfs_ha_enabled:
+        description: HDFS HA mode configuration / HDFS HA 模式配置
+        type: boolean
+      hdfs_ha_namenodes:
+        type: string
+      hdfs_name_services:
+        type: string
+      hdfs_namenode_host:
+        type: string
+      hdfs_namenode_port:
+        type: integer
+      hdfs_namenode_rpc_address_1:
+        type: string
+      hdfs_namenode_rpc_address_2:
+        type: string
+      kerberos_keytab_file_path:
+        type: string
+      kerberos_principal:
+        description: HDFS Kerberos authentication / HDFS Kerberos 认证
+        type: string
+      namespace:
+        type: string
+      storage_access_key:
+        type: string
+      storage_bucket:
+        type: string
+      storage_endpoint:
+        description: OSS/S3 configuration / OSS/S3 配置
+        type: string
+      storage_secret_key:
+        type: string
+      storage_type:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.CheckpointStorageType'
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.CheckpointStorageType:
+    enum:
+    - LOCAL_FILE
+    - HDFS
+    - OSS
+    - S3
+    type: string
+    x-enum-varnames:
+    - CheckpointStorageLocalFile
+    - CheckpointStorageHDFS
+    - CheckpointStorageOSS
+    - CheckpointStorageS3
+  github_com_seatunnel_seatunnelX_internal_apps_installer.ConnectorConfig:
+    properties:
+      connectors:
+        items:
+          type: string
+        type: array
+      install_connectors:
+        type: boolean
+      plugin_repo:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.MirrorSource'
+      selected_plugins:
+        description: |-
+          SelectedPlugins is the list of plugin names to install during SeaTunnel setup
+          SelectedPlugins 是 SeaTunnel 安装过程中要安装的插件名称列表
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.DeploymentMode:
+    enum:
+    - hybrid
+    - separated
+    type: string
+    x-enum-varnames:
+    - DeploymentModeHybrid
+    - DeploymentModeSeparated
+  github_com_seatunnel_seatunnelX_internal_apps_installer.InstallMode:
+    enum:
+    - online
+    - offline
+    type: string
+    x-enum-varnames:
+    - InstallModeOnline
+    - InstallModeOffline
+  github_com_seatunnel_seatunnelX_internal_apps_installer.InstallStep:
+    enum:
+    - download
+    - verify
+    - extract
+    - configure_cluster
+    - configure_checkpoint
+    - configure_jvm
+    - install_plugins
+    - register_cluster
+    - complete
+    type: string
+    x-enum-varnames:
+    - InstallStepDownload
+    - InstallStepVerify
+    - InstallStepExtract
+    - InstallStepConfigureCluster
+    - InstallStepConfigureCheckpoint
+    - InstallStepConfigureJVM
+    - InstallStepInstallPlugins
+    - InstallStepRegisterCluster
+    - InstallStepComplete
+  github_com_seatunnel_seatunnelX_internal_apps_installer.InstallationRequest:
+    properties:
+      checkpoint:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.CheckpointConfig'
+      cluster_id:
+        type: string
+      cluster_port:
+        description: Master hazelcast port / Master Hazelcast 端口
+        type: integer
+      connector:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.ConnectorConfig'
+      deployment_mode:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.DeploymentMode'
+      host_id:
+        type: string
+      http_port:
+        description: SeaTunnel HTTP API 端口
+        type: integer
+      install_dir:
+        type: string
+      install_mode:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.InstallMode'
+      jvm:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.JVMConfig'
+      master_addresses:
+        items:
+          type: string
+        type: array
+      mirror:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.MirrorSource'
+      node_role:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.NodeRole'
+      package_path:
+        type: string
+      version:
+        type: string
+      worker_addresses:
+        description: Worker addresses for separated mode / 分离模式的 worker 地址
+        items:
+          type: string
+        type: array
+      worker_port:
+        description: Worker hazelcast port / Worker Hazelcast 端口
+        type: integer
+    required:
+    - version
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.InstallationStatus:
+    properties:
+      current_step:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.InstallStep'
+      end_time:
+        type: string
+      error:
+        type: string
+      host_id:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      progress:
+        type: integer
+      start_time:
+        type: string
+      status:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.StepStatus'
+      steps:
+        items:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.StepInfo'
+        type: array
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.JVMConfig:
+    properties:
+      hybrid_heap_size:
+        type: integer
+      master_heap_size:
+        type: integer
+      worker_heap_size:
+        type: integer
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.MirrorSource:
+    enum:
+    - aliyun
+    - apache
+    - huaweicloud
+    type: string
+    x-enum-varnames:
+    - MirrorAliyun
+    - MirrorApache
+    - MirrorHuaweiCloud
+  github_com_seatunnel_seatunnelX_internal_apps_installer.NodeRole:
+    enum:
+    - master
+    - worker
+    - master/worker
+    type: string
+    x-enum-varnames:
+    - NodeRoleMaster
+    - NodeRoleWorker
+    - NodeRoleMasterWorker
+  github_com_seatunnel_seatunnelX_internal_apps_installer.PackageInfo:
+    properties:
+      checksum:
+        type: string
+      download_urls:
+        additionalProperties:
+          type: string
+        type: object
+      file_name:
+        type: string
+      file_size:
+        type: integer
+      is_local:
+        type: boolean
+      local_path:
+        type: string
+      uploaded_at:
+        type: string
+      version:
+        type: string
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.PrecheckItem:
+    properties:
+      details:
+        additionalProperties: true
+        type: object
+      message:
+        type: string
+      name:
+        type: string
+      status:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.CheckStatus'
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.PrecheckResult:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.PrecheckItem'
+        type: array
+      overall_status:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.CheckStatus'
+      summary:
+        type: string
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.StepInfo:
+    properties:
+      description:
+        type: string
+      end_time:
+        type: string
+      error:
+        type: string
+      message:
+        type: string
+      name:
+        type: string
+      progress:
+        type: integer
+      retryable:
+        type: boolean
+      start_time:
+        type: string
+      status:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.StepStatus'
+      step:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.InstallStep'
+    type: object
+  github_com_seatunnel_seatunnelX_internal_apps_installer.StepStatus:
+    enum:
+    - pending
+    - running
+    - success
+    - failed
+    - skipped
+    type: string
+    x-enum-varnames:
+    - StepStatusPending
+    - StepStatusRunning
+    - StepStatusSuccess
+    - StepStatusFailed
+    - StepStatusSkipped
   health.HealthResponse:
     properties:
       data: {}
       error_msg:
         type: string
     type: object
-  oauth.BasicUserInfo:
+  host.AgentStatus:
+    enum:
+    - not_installed
+    - installed
+    - offline
+    type: string
+    x-enum-varnames:
+    - AgentStatusNotInstalled
+    - AgentStatusInstalled
+    - AgentStatusOffline
+  host.CreateHostRequest:
     properties:
-      avatar_url:
+      description:
+        type: string
+      docker_api_url:
+        description: docker fields / Docker 字段
+        type: string
+      docker_cert_path:
+        type: string
+      docker_tls_enabled:
+        type: boolean
+      host_type:
+        $ref: '#/definitions/host.HostType'
+      ip_address:
+        description: bare_metal fields / 物理机字段
+        type: string
+      k8s_api_url:
+        description: kubernetes fields / Kubernetes 字段
+        type: string
+      k8s_kubeconfig:
+        type: string
+      k8s_namespace:
+        type: string
+      k8s_token:
+        type: string
+      name:
+        maxLength: 100
+        type: string
+      ssh_port:
+        type: integer
+    required:
+    - name
+    type: object
+  host.CreateHostResponse:
+    properties:
+      data:
+        $ref: '#/definitions/host.HostInfo'
+      error_msg:
+        type: string
+    type: object
+  host.DeleteHostResponse:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  host.GetHostResponse:
+    properties:
+      data:
+        $ref: '#/definitions/host.HostInfo'
+      error_msg:
+        type: string
+    type: object
+  host.GetInstallCommandResponse:
+    properties:
+      data:
+        properties:
+          command:
+            type: string
+        type: object
+      error_msg:
+        type: string
+    type: object
+  host.HostInfo:
+    properties:
+      agent_id:
+        type: string
+      agent_status:
+        $ref: '#/definitions/host.AgentStatus'
+      agent_version:
+        type: string
+      arch:
+        type: string
+      cpu_cores:
+        type: integer
+      cpu_usage:
+        description: Common fields / 通用字段
+        type: number
+      created_at:
+        type: string
+      description:
+        type: string
+      disk_usage:
+        type: number
+      docker_api_url:
+        description: docker fields / Docker 字段
+        type: string
+      docker_tls_enabled:
+        type: boolean
+      docker_version:
+        type: string
+      host_type:
+        $ref: '#/definitions/host.HostType'
+      id:
+        type: integer
+      ip_address:
+        description: bare_metal fields / 物理机字段
+        type: string
+      is_online:
+        type: boolean
+      k8s_api_url:
+        description: kubernetes fields / Kubernetes 字段
+        type: string
+      k8s_namespace:
+        type: string
+      k8s_version:
+        type: string
+      last_check:
+        type: string
+      last_heartbeat:
+        type: string
+      memory_usage:
+        type: number
+      name:
+        type: string
+      os_type:
+        type: string
+      ssh_port:
+        type: integer
+      status:
+        $ref: '#/definitions/host.HostStatus'
+      total_disk:
+        type: integer
+      total_memory:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  host.HostStatus:
+    enum:
+    - pending
+    - connected
+    - offline
+    - error
+    type: string
+    x-enum-varnames:
+    - HostStatusPending
+    - HostStatusConnected
+    - HostStatusOffline
+    - HostStatusError
+  host.HostType:
+    enum:
+    - bare_metal
+    - docker
+    - kubernetes
+    type: string
+    x-enum-varnames:
+    - HostTypeBareMetal
+    - HostTypeDocker
+    - HostTypeKubernetes
+  host.ListHostsResponse:
+    properties:
+      data:
+        properties:
+          hosts:
+            items:
+              $ref: '#/definitions/host.HostInfo'
+            type: array
+          total:
+            type: integer
+        type: object
+      error_msg:
+        type: string
+    type: object
+  host.UpdateHostRequest:
+    properties:
+      description:
+        type: string
+      docker_api_url:
+        description: docker fields / Docker 字段
+        type: string
+      docker_cert_path:
+        type: string
+      docker_tls_enabled:
+        type: boolean
+      ip_address:
+        description: bare_metal fields / 物理机字段
+        type: string
+      k8s_api_url:
+        description: kubernetes fields / Kubernetes 字段
+        type: string
+      k8s_kubeconfig:
+        type: string
+      k8s_namespace:
+        type: string
+      k8s_token:
+        type: string
+      name:
+        type: string
+      ssh_port:
+        type: integer
+    type: object
+  host.UpdateHostResponse:
+    properties:
+      data:
+        $ref: '#/definitions/host.HostInfo'
+      error_msg:
+        type: string
+    type: object
+  installer.DeletePackageResponse:
+    properties:
+      data: {}
+      error_msg:
+        type: string
+    type: object
+  installer.DownloadListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/installer.DownloadTask'
+        type: array
+      error_msg:
+        type: string
+    type: object
+  installer.DownloadRequest:
+    properties:
+      mirror:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.MirrorSource'
+      version:
+        type: string
+    required:
+    - version
+    type: object
+  installer.DownloadResponse:
+    properties:
+      data:
+        $ref: '#/definitions/installer.DownloadTask'
+      error_msg:
+        type: string
+    type: object
+  installer.DownloadStatus:
+    enum:
+    - pending
+    - downloading
+    - completed
+    - failed
+    - cancelled
+    type: string
+    x-enum-varnames:
+    - DownloadStatusPending
+    - DownloadStatusDownloading
+    - DownloadStatusCompleted
+    - DownloadStatusFailed
+    - DownloadStatusCancelled
+  installer.DownloadTask:
+    properties:
+      download_url:
+        type: string
+      downloaded_bytes:
+        type: integer
+      end_time:
+        type: string
+      error:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      mirror:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.MirrorSource'
+      progress:
+        description: 0-100
+        type: integer
+      speed:
+        description: bytes per second
+        type: integer
+      start_time:
+        type: string
+      status:
+        $ref: '#/definitions/installer.DownloadStatus'
+      total_bytes:
+        type: integer
+      version:
+        type: string
+    type: object
+  installer.GetPackageInfoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.PackageInfo'
+      error_msg:
+        type: string
+    type: object
+  installer.InstallResponse:
+    properties:
+      data:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.InstallationStatus'
+      error_msg:
+        type: string
+    type: object
+  installer.ListPackagesResponse:
+    properties:
+      data:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.AvailableVersions'
+      error_msg:
+        type: string
+    type: object
+  installer.PackageChunkUploadResult:
+    properties:
+      completed:
+        type: boolean
+      package:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.PackageInfo'
+      received_chunks:
+        type: integer
+      total_chunks:
+        type: integer
+      upload_id:
+        type: string
+    type: object
+  installer.PrecheckRequest:
+    properties:
+      install_dir:
+        type: string
+      min_cpu_cores:
+        type: integer
+      min_disk_space_mb:
+        type: integer
+      min_memory_mb:
+        type: integer
+      ports:
+        items:
+          type: integer
+        type: array
+    type: object
+  installer.PrecheckResponse:
+    properties:
+      data:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.PrecheckResult'
+      error_msg:
+        type: string
+    type: object
+  installer.RefreshVersionsResponse:
+    properties:
+      data:
+        items:
+          type: string
+        type: array
+      error_msg:
+        type: string
+    type: object
+  installer.RetryStepRequest:
+    properties:
+      step:
+        type: string
+    required:
+    - step
+    type: object
+  installer.UploadChunkResponse:
+    properties:
+      data:
+        $ref: '#/definitions/installer.PackageChunkUploadResult'
+      error_msg:
+        type: string
+    type: object
+  installer.UploadPackageResponse:
+    properties:
+      data:
+        $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.PackageInfo'
+      error_msg:
+        type: string
+    type: object
+  monitor.MonitorConfig:
+    properties:
+      auto_monitor:
+        description: 是否启用自动监控 / Whether auto monitoring is enabled
+        type: boolean
+      auto_restart:
+        description: 是否启用自动拉起 / Whether auto restart is enabled
+        type: boolean
+      cluster_id:
+        description: 关联的集群 ID / Associated cluster ID
+        type: integer
+      config_version:
+        description: 配置版本号 / Config version number
+        type: integer
+      cooldown_period:
+        description: 冷却时间（秒，30分钟）/ Cooldown period (seconds, 30 minutes)
+        type: integer
+      created_at:
         type: string
       id:
         type: integer
-      nickname:
+      last_sync_at:
+        description: 最后同步时间 / Last sync time
         type: string
-      score:
+      max_restarts:
+        description: 最大重启次数 / Max restart count
         type: integer
-      trust_level:
-        $ref: '#/definitions/oauth.TrustLevel'
-      username:
+      monitor_interval:
+        description: 监控间隔（秒）/ Monitor interval (seconds)
+        type: integer
+      restart_delay:
+        description: 重启延迟（秒）/ Restart delay (seconds)
+        type: integer
+      time_window:
+        description: 时间窗口（秒，5分钟）/ Time window (seconds, 5 minutes)
+        type: integer
+      updated_at:
         type: string
+    type: object
+  monitor.UpdateMonitorConfigRequest:
+    properties:
+      auto_monitor:
+        type: boolean
+      auto_restart:
+        type: boolean
+      cooldown_period:
+        type: integer
+      max_restarts:
+        type: integer
+      monitor_interval:
+        type: integer
+      restart_delay:
+        type: integer
+      time_window:
+        type: integer
     type: object
   oauth.CallbackRequest:
     properties:
@@ -124,397 +1891,692 @@ definitions:
       error_msg:
         type: string
     type: object
-  oauth.LogoutResponse:
+  plugin.AddDependencyRequest:
+    properties:
+      artifact_id:
+        description: Maven artifactId
+        type: string
+      group_id:
+        description: Maven groupId
+        type: string
+      plugin_name:
+        description: 插件名称（从 URL 获取）/ Plugin name (from URL)
+        type: string
+      version:
+        description: 版本号（必填）/ Version (required)
+        type: string
+    required:
+    - artifact_id
+    - group_id
+    - version
+    type: object
+  plugin.AddDependencyResponse:
+    properties:
+      data:
+        $ref: '#/definitions/plugin.PluginDependencyConfig'
+      error_msg:
+        type: string
+    type: object
+  plugin.AvailablePluginsResponse:
+    properties:
+      cache_hit:
+        description: 是否命中缓存 / Whether cache was hit
+        type: boolean
+      mirror:
+        description: 当前镜像源 / Current mirror
+        type: string
+      plugins:
+        description: 插件列表 / Plugin list
+        items:
+          $ref: '#/definitions/plugin.Plugin'
+        type: array
+      source:
+        allOf:
+        - $ref: '#/definitions/plugin.PluginListSource'
+        description: 数据来源 / Data source
+      total:
+        description: 总数 / Total count
+        type: integer
+      version:
+        description: SeaTunnel 版本 / SeaTunnel version
+        type: string
+    type: object
+  plugin.DeleteDependencyResponse:
     properties:
       data: {}
       error_msg:
         type: string
     type: object
-  oauth.TrustLevel:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    format: int32
-    type: integer
-    x-enum-varnames:
-    - TrustLevelNewUser
-    - TrustLevelBasicUser
-    - TrustLevelUser
-    - TrustLevelActiveUser
-    - TrustLevelLeader
-  oauth.User:
+  plugin.DeleteLocalPluginResponse:
     properties:
-      avatar_url:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: integer
-      is_active:
-        type: boolean
-      is_admin:
-        type: boolean
-      last_login_at:
-        type: string
-      nickname:
-        type: string
-      score:
-        type: integer
-      trust_level:
-        $ref: '#/definitions/oauth.TrustLevel'
-      updated_at:
-        type: string
-      username:
-        type: string
-      violation_count:
-        type: integer
-    type: object
-  oauth.UserInfoResponse:
-    properties:
-      data:
-        $ref: '#/definitions/oauth.BasicUserInfo'
+      data: {}
       error_msg:
         type: string
     type: object
-  project.CreateProjectRequestBody:
+  plugin.DownloadAllPluginsProgress:
     properties:
-      allow_same_ip:
-        type: boolean
-      description:
-        maxLength: 1024
-        type: string
-      distribution_type:
-        allOf:
-        - $ref: '#/definitions/project.DistributionType'
-        enum:
-        - 0
-        - 1
-      end_time:
-        type: string
-      hide_from_explore:
-        type: boolean
-      minimum_trust_level:
-        allOf:
-        - $ref: '#/definitions/oauth.TrustLevel'
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-      name:
-        maxLength: 32
-        minLength: 1
-        type: string
-      project_items:
-        items:
-          type: string
-        minItems: 1
-        type: array
-      project_tags:
-        items:
-          type: string
-        type: array
-      risk_level:
-        maximum: 100
-        minimum: 0
+      downloaded:
+        description: 已下载数 / Downloaded count
         type: integer
-      start_time:
-        type: string
-      topic_id:
+      failed:
+        description: 失败数 / Failed count
         type: integer
-    required:
-    - end_time
-    - name
-    - project_items
-    - start_time
+      message:
+        description: 消息 / Message
+        type: string
+      skipped:
+        description: 跳过数（已存在）/ Skipped count (already exists)
+        type: integer
+      status:
+        description: 状态 / Status
+        type: string
+      total:
+        description: 总插件数 / Total plugins
+        type: integer
     type: object
-  project.DistributionType:
-    enum:
-    - 0
-    - 1
-    - 2
-    format: int32
-    type: integer
-    x-enum-varnames:
-    - DistributionTypeOneForEach
-    - DistributionTypeLottery
-    - DistributionTypeInvite
-  project.GetProjectResponseData:
+  plugin.DownloadAllPluginsRequest:
     properties:
-      allow_same_ip:
-        type: boolean
-      available_items_count:
+      mirror:
+        allOf:
+        - $ref: '#/definitions/plugin.MirrorSource'
+        description: 镜像源 / Mirror source
+      version:
+        description: 版本号 / Version
+        type: string
+    required:
+    - version
+    type: object
+  plugin.DownloadAllPluginsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/plugin.DownloadAllPluginsProgress'
+      error_msg:
+        type: string
+    type: object
+  plugin.DownloadPluginRequest:
+    properties:
+      mirror:
+        allOf:
+        - $ref: '#/definitions/plugin.MirrorSource'
+        description: 镜像源 / Mirror source
+      version:
+        description: 版本号 / Version
+        type: string
+    required:
+    - version
+    type: object
+  plugin.DownloadPluginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/plugin.DownloadProgress'
+      error_msg:
+        type: string
+    type: object
+  plugin.DownloadProgress:
+    properties:
+      current_step:
+        description: 当前步骤 / Current step
+        type: string
+      downloaded_bytes:
+        description: 已下载字节 / Downloaded bytes
         type: integer
-      created_at:
-        type: string
-      creator_id:
-        type: integer
-      creator_nickname:
-        type: string
-      creator_username:
-        type: string
-      description:
-        type: string
-      distribution_type:
-        $ref: '#/definitions/project.DistributionType'
       end_time:
+        description: 结束时间 / End time
         type: string
-      hide_from_explore:
-        type: boolean
-      id:
+      error:
+        description: 错误信息 / Error message
         type: string
-      is_completed:
-        type: boolean
-      is_received:
-        type: boolean
-      minimum_trust_level:
-        $ref: '#/definitions/oauth.TrustLevel'
-      name:
+      message:
+        description: 消息 / Message
         type: string
-      received_content:
+      plugin_name:
+        description: 插件名称 / Plugin name
         type: string
-      report_count:
+      progress:
+        description: 进度 (0-100) / Progress
         type: integer
-      risk_level:
+      speed:
+        description: 下载速度 (bytes/s) / Download speed
         type: integer
       start_time:
+        description: 开始时间 / Start time
         type: string
       status:
-        $ref: '#/definitions/project.ProjectStatus'
-      tags:
-        items:
-          type: string
-        type: array
-      total_items:
+        description: '状态: pending/downloading/completed/failed / Status'
+        type: string
+      total_bytes:
+        description: 总字节 / Total bytes
         type: integer
-      updated_at:
+      version:
+        description: 版本号 / Version
         type: string
     type: object
-  project.ListProjectsResponse:
+  plugin.EnableDisablePluginResponse:
     properties:
       data:
-        $ref: '#/definitions/project.ListProjectsResponseData'
+        $ref: '#/definitions/plugin.InstalledPlugin'
       error_msg:
         type: string
     type: object
-  project.ListProjectsResponseData:
+  plugin.GetDownloadStatusResponse:
     properties:
-      results:
-        items:
-          $ref: '#/definitions/project.ListProjectsResponseDataResult'
-        type: array
-      total:
-        type: integer
+      data:
+        $ref: '#/definitions/plugin.DownloadProgress'
+      error_msg:
+        type: string
     type: object
-  project.ListProjectsResponseDataResult:
+  plugin.GetInstallProgressResponse:
     properties:
-      allow_same_ip:
-        type: boolean
+      data:
+        $ref: '#/definitions/plugin.PluginInstallStatus'
+      error_msg:
+        type: string
+    type: object
+  plugin.GetPluginInfoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/plugin.Plugin'
+      error_msg:
+        type: string
+    type: object
+  plugin.InstallPluginRequest:
+    properties:
+      mirror:
+        allOf:
+        - $ref: '#/definitions/plugin.MirrorSource'
+        description: 镜像源 / Mirror source
+      plugin_name:
+        description: 插件名称 / Plugin name
+        type: string
+      version:
+        description: 版本号 / Version
+        type: string
+    required:
+    - plugin_name
+    - version
+    type: object
+  plugin.InstallPluginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/plugin.InstalledPlugin'
+      error_msg:
+        type: string
+    type: object
+  plugin.InstalledPlugin:
+    properties:
+      artifact_id:
+        description: Maven artifact ID (e.g., connector-cdc-mysql)
+        type: string
+      category:
+        allOf:
+        - $ref: '#/definitions/plugin.PluginCategory'
+        description: 分类 / Category
+      cluster_id:
+        description: 集群 ID / Cluster ID
+        type: integer
+      id:
+        type: integer
+      install_path:
+        description: 安装路径 / Install path
+        type: string
+      installed_at:
+        description: 安装时间 / Installed at
+        type: string
+      installed_by:
+        description: 安装者 ID / Installed by
+        type: integer
+      plugin_name:
+        description: 插件名称 / Plugin name
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/plugin.PluginStatus'
+        description: 状态 / Status
+      updated_at:
+        description: 更新时间 / Updated at
+        type: string
+      version:
+        description: 版本号 / Version
+        type: string
+    type: object
+  plugin.ListActiveDownloadsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/plugin.DownloadProgress'
+        type: array
+      error_msg:
+        type: string
+    type: object
+  plugin.ListDependenciesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/plugin.PluginDependencyConfig'
+        type: array
+      error_msg:
+        type: string
+    type: object
+  plugin.ListInstalledPluginsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/plugin.InstalledPlugin'
+        type: array
+      error_msg:
+        type: string
+    type: object
+  plugin.ListLocalPluginsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/plugin.LocalPlugin'
+        type: array
+      error_msg:
+        type: string
+    type: object
+  plugin.ListPluginsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/plugin.AvailablePluginsResponse'
+      error_msg:
+        type: string
+    type: object
+  plugin.LocalPlugin:
+    properties:
+      category:
+        allOf:
+        - $ref: '#/definitions/plugin.PluginCategory'
+        description: 插件分类 / Plugin category
+      connector_path:
+        description: 连接器路径 / Connector path
+        type: string
+      downloaded_at:
+        description: 下载时间 / Downloaded at
+        type: string
+      name:
+        description: 插件名称 / Plugin name
+        type: string
+      size:
+        description: 文件大小 / File size
+        type: integer
+      version:
+        description: 版本号 / Version
+        type: string
+    type: object
+  plugin.MirrorSource:
+    enum:
+    - apache
+    - aliyun
+    - huaweicloud
+    type: string
+    x-enum-comments:
+      MirrorSourceAliyun: 阿里云镜像
+      MirrorSourceApache: Apache 官方仓库
+      MirrorSourceHuaweiCloud: 华为云镜像
+    x-enum-descriptions:
+    - Apache 官方仓库
+    - 阿里云镜像
+    - 华为云镜像
+    x-enum-varnames:
+    - MirrorSourceApache
+    - MirrorSourceAliyun
+    - MirrorSourceHuaweiCloud
+  plugin.Plugin:
+    properties:
+      artifact_id:
+        description: Maven artifactId
+        type: string
+      category:
+        allOf:
+        - $ref: '#/definitions/plugin.PluginCategory'
+        description: 分类 / Category
+      dependencies:
+        description: 依赖库列表 / Dependencies
+        items:
+          $ref: '#/definitions/plugin.PluginDependency'
+        type: array
+      description:
+        description: 描述 / Description
+        type: string
+      display_name:
+        description: 显示名称 / Display name
+        type: string
+      doc_url:
+        description: 文档链接 / Documentation URL
+        type: string
+      group_id:
+        description: Maven groupId
+        type: string
+      icon:
+        description: 图标 URL / Icon URL
+        type: string
+      name:
+        description: 插件名称 / Plugin name
+        type: string
+      version:
+        description: 版本号（与 SeaTunnel 主版本一致）/ Version
+        type: string
+    type: object
+  plugin.PluginCategory:
+    enum:
+    - source
+    - sink
+    - connector
+    - transform
+    type: string
+    x-enum-comments:
+      PluginCategoryConnector: Connector / 连接器 (primary category, can be used as source
+        or sink / 主要分类，可作为 source 或 sink)
+      PluginCategorySink: Sink / Data sink (legacy, for compatibility / 遗留，用于兼容)
+      PluginCategorySource: Source / Data source (legacy, for compatibility / 遗留，用于兼容)
+      PluginCategoryTransform: Transform / 数据转换 (deprecated, not fetched from Maven
+        / 已弃用，不从 Maven 获取)
+    x-enum-descriptions:
+    - Source / Data source (legacy, for compatibility / 遗留，用于兼容)
+    - Sink / Data sink (legacy, for compatibility / 遗留，用于兼容)
+    - Connector / 连接器 (primary category, can be used as source or sink / 主要分类，可作为
+      source 或 sink)
+    - Transform / 数据转换 (deprecated, not fetched from Maven / 已弃用，不从 Maven 获取)
+    x-enum-varnames:
+    - PluginCategorySource
+    - PluginCategorySink
+    - PluginCategoryConnector
+    - PluginCategoryTransform
+  plugin.PluginDependency:
+    properties:
+      artifact_id:
+        description: Maven artifactId
+        type: string
+      group_id:
+        description: Maven groupId
+        type: string
+      target_dir:
+        description: 目标目录 (connectors/ 或 lib/) / Target directory
+        type: string
+      version:
+        description: 版本号 / Version
+        type: string
+    type: object
+  plugin.PluginDependencyConfig:
+    properties:
+      artifact_id:
+        description: Maven artifactId
+        type: string
       created_at:
         type: string
-      description:
+      group_id:
+        description: Maven groupId
         type: string
-      distribution_type:
-        $ref: '#/definitions/project.DistributionType'
-      end_time:
-        type: string
-      hide_from_explore:
-        type: boolean
       id:
-        type: string
-      minimum_trust_level:
-        $ref: '#/definitions/oauth.TrustLevel'
-      name:
-        type: string
-      risk_level:
         type: integer
-      start_time:
+      plugin_name:
+        description: 插件名称 / Plugin name
         type: string
-      tags:
-        items:
-          type: string
-        type: array
-      total_items:
+      target_dir:
+        description: 目标目录 (lib) / Target directory
+        type: string
+      updated_at:
+        type: string
+      version:
+        description: 版本号（可选，留空则使用插件版本）/ Version (optional, use plugin version if empty)
+        type: string
+    type: object
+  plugin.PluginInstallStatus:
+    properties:
+      error:
+        description: 错误信息 / Error message
+        type: string
+      message:
+        description: 消息 / Message
+        type: string
+      plugin_name:
+        description: 插件名称 / Plugin name
+        type: string
+      progress:
+        description: 进度 (0-100) / Progress
         type: integer
-    type: object
-  project.ListReceiveHistoryResponse:
-    properties:
-      data:
-        $ref: '#/definitions/project.ListReceiveHistoryResponseData'
-      error_msg:
+      status:
+        description: 状态 / Status
         type: string
     type: object
-  project.ListReceiveHistoryResponseData:
-    properties:
-      results:
-        items:
-          $ref: '#/definitions/project.ListReceiveHistoryResponseDataResult'
-        type: array
-      total:
-        type: integer
-    type: object
-  project.ListReceiveHistoryResponseDataResult:
-    properties:
-      content:
-        type: string
-      project_creator:
-        type: string
-      project_creator_nickname:
-        type: string
-      project_id:
-        type: string
-      project_name:
-        type: string
-      received_at:
-        type: string
-    type: object
-  project.ListTagsResponse:
-    properties:
-      data:
-        items:
-          type: string
-        type: array
-      error_msg:
-        type: string
-    type: object
-  project.ProjectResponse:
+  plugin.PluginListSource:
+    enum:
+    - cache
+    - remote
+    type: string
+    x-enum-varnames:
+    - PluginListSourceCache
+    - PluginListSourceRemote
+  plugin.PluginStatus:
+    enum:
+    - available
+    - installed
+    - enabled
+    - disabled
+    type: string
+    x-enum-comments:
+      PluginStatusAvailable: 可用 / Available
+      PluginStatusDisabled: 已禁用 / Disabled
+      PluginStatusEnabled: 已启用 / Enabled
+      PluginStatusInstalled: 已安装 / Installed
+    x-enum-descriptions:
+    - 可用 / Available
+    - 已安装 / Installed
+    - 已启用 / Enabled
+    - 已禁用 / Disabled
+    x-enum-varnames:
+    - PluginStatusAvailable
+    - PluginStatusInstalled
+    - PluginStatusEnabled
+    - PluginStatusDisabled
+  plugin.UninstallPluginResponse:
     properties:
       data: {}
       error_msg:
         type: string
     type: object
-  project.ProjectStatus:
-    enum:
-    - 0
-    - 1
-    - 2
-    format: int32
-    type: integer
-    x-enum-varnames:
-    - ProjectStatusNormal
-    - ProjectStatusHidden
-    - ProjectStatusViolation
-  project.ReportProjectRequestBody:
+  task.CreateTaskRequest:
     properties:
-      reason:
-        maxLength: 255
-        minLength: 1
-        type: string
-    required:
-    - reason
-    type: object
-  project.UpdateProjectRequestBody:
-    properties:
-      allow_same_ip:
-        type: boolean
-      description:
-        maxLength: 1024
-        type: string
-      enable_filter:
-        type: boolean
-      end_time:
-        type: string
-      hide_from_explore:
-        type: boolean
-      minimum_trust_level:
-        allOf:
-        - $ref: '#/definitions/oauth.TrustLevel'
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-      name:
-        maxLength: 32
-        minLength: 1
-        type: string
-      project_items:
-        items:
-          type: string
-        type: array
-      project_tags:
-        items:
-          type: string
-        type: array
-      risk_level:
-        maximum: 100
-        minimum: 0
+      host_id:
+        description: |-
+          HostID is the target host ID
+          HostID 是目标主机 ID
         type: integer
-      start_time:
-        type: string
+      params:
+        additionalProperties: true
+        description: |-
+          Params contains task-specific parameters
+          Params 包含任务特定的参数
+        type: object
+      timeout_seconds:
+        description: |-
+          TimeoutSeconds is the task timeout in seconds
+          TimeoutSeconds 是任务超时时间（秒）
+        type: integer
+      type:
+        allOf:
+        - $ref: '#/definitions/task.TaskType'
+        description: |-
+          Type is the task type
+          Type 是任务类型
     required:
-    - end_time
-    - name
-    - start_time
+    - host_id
+    - type
     type: object
+  task.Task:
+    properties:
+      agent_id:
+        description: |-
+          AgentID is the target agent ID
+          AgentID 是目标 Agent ID
+        type: string
+      completed_at:
+        description: |-
+          CompletedAt is when the task completed
+          CompletedAt 是任务完成时间
+        type: string
+      created_at:
+        description: |-
+          CreatedAt is when the task was created
+          CreatedAt 是任务创建时间
+        type: string
+      created_by:
+        description: |-
+          CreatedBy is the user who created the task
+          CreatedBy 是创建任务的用户
+        type: string
+      error:
+        description: |-
+          Error is the error message if failed
+          Error 是失败时的错误消息
+        type: string
+      host_id:
+        description: |-
+          HostID is the target host ID
+          HostID 是目标主机 ID
+        type: integer
+      id:
+        description: |-
+          ID is the unique task identifier
+          ID 是唯一的任务标识符
+        type: string
+      max_retries:
+        description: |-
+          MaxRetries is the maximum number of retries
+          MaxRetries 是最大重试次数
+        type: integer
+      message:
+        description: |-
+          Message is the current status message
+          Message 是当前状态消息
+        type: string
+      params:
+        additionalProperties: true
+        description: |-
+          Params contains task-specific parameters
+          Params 包含任务特定的参数
+        type: object
+      progress:
+        description: |-
+          Progress is the task progress (0-100)
+          Progress 是任务进度（0-100）
+        type: integer
+      result:
+        additionalProperties: true
+        description: |-
+          Result contains task execution result
+          Result 包含任务执行结果
+        type: object
+      retry_count:
+        description: |-
+          RetryCount is the number of retry attempts
+          RetryCount 是重试次数
+        type: integer
+      retryable:
+        description: |-
+          Retryable indicates if the task can be retried
+          Retryable 表示任务是否可重试
+        type: boolean
+      started_at:
+        description: |-
+          StartedAt is when the task started executing
+          StartedAt 是任务开始执行时间
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/task.TaskStatus'
+        description: |-
+          Status is the current task status
+          Status 是当前任务状态
+      timeout_seconds:
+        description: |-
+          TimeoutSeconds is the task timeout in seconds (0 means no timeout)
+          TimeoutSeconds 是任务超时时间（秒），0 表示无超时
+        type: integer
+      type:
+        allOf:
+        - $ref: '#/definitions/task.TaskType'
+        description: |-
+          Type is the task type
+          Type 是任务类型
+    type: object
+  task.TaskListAPIResponse:
+    properties:
+      data:
+        $ref: '#/definitions/task.TaskListResponse'
+      error_msg:
+        type: string
+    type: object
+  task.TaskListResponse:
+    properties:
+      tasks:
+        description: |-
+          Tasks is the list of tasks
+          Tasks 是任务列表
+        items:
+          $ref: '#/definitions/task.Task'
+        type: array
+      total:
+        description: |-
+          Total is the total number of tasks
+          Total 是任务总数
+        type: integer
+    type: object
+  task.TaskResponse:
+    properties:
+      data:
+        $ref: '#/definitions/task.Task'
+      error_msg:
+        type: string
+    type: object
+  task.TaskStatus:
+    enum:
+    - pending
+    - running
+    - success
+    - failed
+    - cancelled
+    - timeout
+    type: string
+    x-enum-varnames:
+    - TaskStatusPending
+    - TaskStatusRunning
+    - TaskStatusSuccess
+    - TaskStatusFailed
+    - TaskStatusCancelled
+    - TaskStatusTimeout
+  task.TaskType:
+    enum:
+    - install
+    - uninstall
+    - upgrade
+    - start
+    - stop
+    - restart
+    - precheck
+    - collect_logs
+    - transfer_package
+    - install_plugin
+    - uninstall_plugin
+    type: string
+    x-enum-varnames:
+    - TaskTypeInstall
+    - TaskTypeUninstall
+    - TaskTypeUpgrade
+    - TaskTypeStart
+    - TaskTypeStop
+    - TaskTypeRestart
+    - TaskTypePrecheck
+    - TaskTypeCollectLogs
+    - TaskTypeTransferPackage
+    - TaskTypeInstallPlugin
+    - TaskTypeUninstallPlugin
 info:
   contact: {}
   title: Seatunnel X
   version: 0.1.0
 paths:
-  /api/v1/admin/projects:
-    get:
-      parameters:
-      - in: query
-        minimum: 1
-        name: current
-        type: integer
-      - in: query
-        maximum: 100
-        minimum: 1
-        name: size
-        type: integer
-      - enum:
-        - 0
-        - 1
-        - 2
-        format: int32
-        in: query
-        name: status
-        type: integer
-        x-enum-varnames:
-        - ProjectStatusNormal
-        - ProjectStatusHidden
-        - ProjectStatusViolation
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/admin.ListProjectsResponse'
-      tags:
-      - admin
-  /api/v1/admin/projects/{id}/review:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: 项目ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 项目信息
-        in: body
-        name: project
-        required: true
-        schema:
-          $ref: '#/definitions/admin.ReviewProjectRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/admin.ReviewProjectResponse'
-      tags:
-      - admin
   /api/v1/admin/users:
     get:
       parameters:
@@ -529,29 +2591,10 @@ paths:
         name: is_admin
         type: boolean
       - in: query
-        name: min_violations
-        type: integer
-      - in: query
         maximum: 100
         minimum: 1
         name: size
         type: integer
-      - enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        format: int32
-        in: query
-        name: trust_level
-        type: integer
-        x-enum-varnames:
-        - TrustLevelNewUser
-        - TrustLevelBasicUser
-        - TrustLevelUser
-        - TrustLevelActiveUser
-        - TrustLevelLeader
       - in: query
         name: username
         type: string
@@ -561,15 +2604,35 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/admin.listUsersResponse'
+            $ref: '#/definitions/admin.ListUsersResponse'
       tags:
       - admin
-  /api/v1/dashboard/stats/all:
-    get:
+    post:
+      consumes:
+      - application/json
       parameters:
-      - description: request query
-        in: query
-        name: days
+      - description: 创建用户请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.CreateUserResponse'
+      tags:
+      - admin
+  /api/v1/admin/users/{id}:
+    delete:
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
         type: integer
       produces:
       - application/json
@@ -577,9 +2640,1381 @@ paths:
         "200":
           description: OK
           schema:
+            $ref: '#/definitions/admin.DeleteUserResponse'
+      tags:
+      - admin
+    get:
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.GetUserResponse'
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新用户请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/admin.UpdateUserResponse'
+      tags:
+      - admin
+  /api/v1/agent/download:
+    get:
+      parameters:
+      - description: Operating system (linux, darwin)
+        in: query
+        name: os
+        required: true
+        type: string
+      - description: CPU architecture (amd64, arm64)
+        in: query
+        name: arch
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Agent binary file
+          schema:
+            type: file
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/agent.ErrorResponse'
+        "404":
+          description: Binary not found
+          schema:
+            $ref: '#/definitions/agent.ErrorResponse'
+      tags:
+      - agent
+  /api/v1/agent/install.sh:
+    get:
+      produces:
+      - text/x-shellscript
+      responses:
+        "200":
+          description: Install script
+          schema:
+            type: string
+      tags:
+      - agent
+  /api/v1/agent/uninstall.sh:
+    get:
+      produces:
+      - text/x-shellscript
+      responses:
+        "200":
+          description: Uninstall script
+          schema:
+            type: string
+      tags:
+      - agent
+  /api/v1/audit-logs:
+    get:
+      parameters:
+      - in: query
+        name: action
+        type: string
+      - in: query
+        minimum: 1
+        name: current
+        type: integer
+      - in: query
+        name: end_time
+        type: string
+      - in: query
+        name: resource_id
+        type: string
+      - in: query
+        name: resource_type
+        type: string
+      - in: query
+        maximum: 100
+        minimum: 1
+        name: size
+        type: integer
+      - in: query
+        name: start_time
+        type: string
+      - description: '"auto" | "manual"'
+        in: query
+        name: trigger
+        type: string
+      - in: query
+        name: user_id
+        type: integer
+      - in: query
+        name: username
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.ListAuditLogsResponse'
+      tags:
+      - audit
+  /api/v1/audit-logs/{id}:
+    get:
+      parameters:
+      - description: 审计日志ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.GetAuditLogResponse'
+      tags:
+      - audit
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 登录请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LoginResponse'
+      tags:
+      - auth
+  /api/v1/auth/logout:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.LogoutResponse'
+      tags:
+      - auth
+  /api/v1/auth/profile:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 更新个人信息请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.UpdateProfileResponse'
+      tags:
+      - auth
+  /api/v1/auth/user-info:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.UserInfoResponse'
+      tags:
+      - auth
+  /api/v1/clusters:
+    get:
+      parameters:
+      - in: query
+        minimum: 1
+        name: current
+        type: integer
+      - enum:
+        - hybrid
+        - separated
+        in: query
+        name: deployment_mode
+        type: string
+        x-enum-varnames:
+        - DeploymentModeHybrid
+        - DeploymentModeSeparated
+      - in: query
+        name: name
+        type: string
+      - in: query
+        maximum: 100
+        minimum: 1
+        name: size
+        type: integer
+      - enum:
+        - created
+        - deploying
+        - running
+        - stopped
+        - error
+        in: query
+        name: status
+        type: string
+        x-enum-varnames:
+        - ClusterStatusCreated
+        - ClusterStatusDeploying
+        - ClusterStatusRunning
+        - ClusterStatusStopped
+        - ClusterStatusError
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.ListClustersResponse'
+      tags:
+      - clusters
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建集群请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cluster.CreateClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.CreateClusterResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}:
+    delete:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.DeleteClusterResponse'
+      tags:
+      - clusters
+    get:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.GetClusterResponse'
+      tags:
+      - clusters
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新集群请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cluster.UpdateClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.UpdateClusterResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/configs:
+    get:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 获取集群配置列表
+      tags:
+      - Config
+  /api/v1/clusters/{id}/configs/init:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 初始化请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.InitClusterConfigsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 初始化集群配置
+      tags:
+      - Config
+  /api/v1/clusters/{id}/configs/sync-all:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 同步请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.SyncTemplateToAllNodesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 同步模板到所有节点
+      tags:
+      - Config
+  /api/v1/clusters/{id}/events:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of process events for a specific cluster
+      parameters:
+      - description: Cluster ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Event type filter
+        in: query
+        name: event_type
+        type: string
+      - description: Node ID filter
+        in: query
+        name: node_id
+        type: integer
+      - description: Start time (RFC3339)
+        in: query
+        name: start_time
+        type: string
+      - description: End time (RFC3339)
+        in: query
+        name: end_time
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List process events for a cluster
+      tags:
+      - Monitor
+  /api/v1/clusters/{id}/events/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get event statistics for a specific cluster
+      parameters:
+      - description: Cluster ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Since time (RFC3339)
+        in: query
+        name: since
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              format: int64
+              type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get event statistics for a cluster
+      tags:
+      - Monitor
+  /api/v1/clusters/{id}/monitor-config:
+    get:
+      consumes:
+      - application/json
+      description: Get the monitoring configuration for a specific cluster
+      parameters:
+      - description: Cluster ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/monitor.MonitorConfig'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get monitor configuration for a cluster
+      tags:
+      - Monitor
+    put:
+      consumes:
+      - application/json
+      description: Update the monitoring configuration for a specific cluster
+      parameters:
+      - description: Cluster ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Monitor config update
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/monitor.UpdateMonitorConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/monitor.MonitorConfig'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update monitor configuration for a cluster
+      tags:
+      - Monitor
+  /api/v1/clusters/{id}/nodes:
+    get:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.GetNodesResponse'
+      tags:
+      - clusters
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 添加节点请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cluster.AddNodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.AddNodeResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/nodes/{nodeId}:
+    delete:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 节点ID
+        in: path
+        name: nodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.RemoveNodeResponse'
+      tags:
+      - clusters
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 节点ID
+        in: path
+        name: nodeId
+        required: true
+        type: integer
+      - description: 更新节点请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cluster.UpdateNodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.AddNodeResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/nodes/precheck:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 预检查请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/cluster.PrecheckRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.PrecheckNodeResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/plugins:
+    get:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.ListInstalledPluginsResponse'
+      tags:
+      - plugins
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 安装请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugin.InstallPluginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.InstallPluginResponse'
+      tags:
+      - plugins
+  /api/v1/clusters/{id}/plugins/{name}:
+    delete:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.UninstallPluginResponse'
+      tags:
+      - plugins
+  /api/v1/clusters/{id}/plugins/{name}/disable:
+    put:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.EnableDisablePluginResponse'
+      tags:
+      - plugins
+  /api/v1/clusters/{id}/plugins/{name}/enable:
+    put:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.EnableDisablePluginResponse'
+      tags:
+      - plugins
+  /api/v1/clusters/{id}/plugins/{name}/progress:
+    get:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.GetInstallProgressResponse'
+      tags:
+      - plugins
+  /api/v1/clusters/{id}/restart:
+    post:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.ClusterOperationResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/start:
+    post:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.ClusterOperationResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/status:
+    get:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.GetClusterStatusResponse'
+      tags:
+      - clusters
+  /api/v1/clusters/{id}/stop:
+    post:
+      parameters:
+      - description: 集群ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cluster.ClusterOperationResponse'
+      tags:
+      - clusters
+  /api/v1/commands:
+    get:
+      parameters:
+      - in: query
+        name: agent_id
+        type: string
+      - in: query
+        name: command_id
+        type: string
+      - in: query
+        name: command_type
+        type: string
+      - in: query
+        minimum: 1
+        name: current
+        type: integer
+      - in: query
+        name: end_time
+        type: string
+      - in: query
+        name: host_id
+        type: integer
+      - in: query
+        maximum: 100
+        minimum: 1
+        name: size
+        type: integer
+      - in: query
+        name: start_time
+        type: string
+      - enum:
+        - pending
+        - running
+        - success
+        - failed
+        - cancelled
+        in: query
+        name: status
+        type: string
+        x-enum-varnames:
+        - CommandStatusPending
+        - CommandStatusRunning
+        - CommandStatusSuccess
+        - CommandStatusFailed
+        - CommandStatusCancelled
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.ListCommandLogsResponse'
+      tags:
+      - audit
+  /api/v1/commands/{id}:
+    get:
+      parameters:
+      - description: 命令日志ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.GetCommandLogResponse'
+      tags:
+      - audit
+  /api/v1/configs/{id}:
+    get:
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 获取配置详情
+      tags:
+      - Config
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新内容
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.UpdateConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 更新配置
+      tags:
+      - Config
+  /api/v1/configs/{id}/promote:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 推广请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.PromoteConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 推广配置到集群
+      tags:
+      - Config
+  /api/v1/configs/{id}/push:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 推送请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.PushConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 推送配置到节点
+      tags:
+      - Config
+  /api/v1/configs/{id}/rollback:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 回滚请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.RollbackConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 回滚配置
+      tags:
+      - Config
+  /api/v1/configs/{id}/sync:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 同步请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/config.SyncConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 从集群模板同步配置
+      tags:
+      - Config
+  /api/v1/configs/{id}/versions:
+    get:
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/config.Response'
+      summary: 获取配置版本历史
+      tags:
+      - Config
+  /api/v1/dashboard/overview:
+    get:
+      consumes:
+      - application/json
+      description: Get complete dashboard overview data including stats, clusters,
+        hosts, and activities
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dashboard.DashboardDataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dashboard.OverviewData'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
             $ref: '#/definitions/dashboard.DashboardDataResponse'
+      summary: Get complete dashboard overview data
       tags:
       - Dashboard
+  /api/v1/dashboard/overview/activities:
+    get:
+      consumes:
+      - application/json
+      description: Get recent audit log activities for dashboard
+      parameters:
+      - default: 10
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dashboard.DashboardDataResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dashboard.RecentActivity'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dashboard.DashboardDataResponse'
+      summary: Get recent activities
+      tags:
+      - Dashboard
+  /api/v1/dashboard/overview/clusters:
+    get:
+      consumes:
+      - application/json
+      description: Get cluster summaries for dashboard
+      parameters:
+      - default: 5
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dashboard.DashboardDataResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dashboard.ClusterSummary'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dashboard.DashboardDataResponse'
+      summary: Get cluster summaries
+      tags:
+      - Dashboard
+  /api/v1/dashboard/overview/hosts:
+    get:
+      consumes:
+      - application/json
+      description: Get host summaries for dashboard
+      parameters:
+      - default: 5
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dashboard.DashboardDataResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dashboard.HostSummary'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dashboard.DashboardDataResponse'
+      summary: Get host summaries
+      tags:
+      - Dashboard
+  /api/v1/dashboard/overview/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get dashboard overview statistics including hosts, clusters, nodes,
+        and agents
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dashboard.DashboardDataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/dashboard.OverviewStats'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dashboard.DashboardDataResponse'
+      summary: Get dashboard overview statistics
+      tags:
+      - Dashboard
+  /api/v1/deepwiki/docs:
+    get:
+      consumes:
+      - application/json
+      description: Fetch SeaTunnel documentation from DeepWiki
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/deepwiki.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/deepwiki.DeepWikiResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deepwiki.Response'
+      summary: Get SeaTunnel documentation from DeepWiki
+      tags:
+      - DeepWiki
+  /api/v1/deepwiki/fetch:
+    post:
+      consumes:
+      - application/json
+      description: Fetch documentation from DeepWiki for a specific repository
+      parameters:
+      - description: Fetch request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deepwiki.DeepWikiRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/deepwiki.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/deepwiki.DeepWikiResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deepwiki.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deepwiki.Response'
+      summary: Fetch documentation from DeepWiki
+      tags:
+      - DeepWiki
+  /api/v1/deepwiki/search:
+    post:
+      consumes:
+      - application/json
+      description: Search SeaTunnel documentation in DeepWiki
+      parameters:
+      - description: Search request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deepwiki.SearchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/deepwiki.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/deepwiki.SearchResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deepwiki.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deepwiki.Response'
+      summary: Search SeaTunnel documentation
+      tags:
+      - DeepWiki
   /api/v1/health:
     get:
       produces:
@@ -591,6 +4026,412 @@ paths:
             $ref: '#/definitions/health.HealthResponse'
       tags:
       - health
+  /api/v1/hosts:
+    get:
+      parameters:
+      - enum:
+        - not_installed
+        - installed
+        - offline
+        in: query
+        name: agent_status
+        type: string
+        x-enum-varnames:
+        - AgentStatusNotInstalled
+        - AgentStatusInstalled
+        - AgentStatusOffline
+      - in: query
+        minimum: 1
+        name: current
+        type: integer
+      - enum:
+        - bare_metal
+        - docker
+        - kubernetes
+        in: query
+        name: host_type
+        type: string
+        x-enum-varnames:
+        - HostTypeBareMetal
+        - HostTypeDocker
+        - HostTypeKubernetes
+      - in: query
+        name: ip_address
+        type: string
+      - in: query
+        name: is_online
+        type: boolean
+      - in: query
+        name: name
+        type: string
+      - in: query
+        maximum: 100
+        minimum: 1
+        name: size
+        type: integer
+      - enum:
+        - pending
+        - connected
+        - offline
+        - error
+        in: query
+        name: status
+        type: string
+        x-enum-varnames:
+        - HostStatusPending
+        - HostStatusConnected
+        - HostStatusOffline
+        - HostStatusError
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/host.ListHostsResponse'
+      tags:
+      - hosts
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建主机请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/host.CreateHostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/host.CreateHostResponse'
+      tags:
+      - hosts
+  /api/v1/hosts/{id}:
+    delete:
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/host.DeleteHostResponse'
+      tags:
+      - hosts
+    get:
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/host.GetHostResponse'
+      tags:
+      - hosts
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新主机请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/host.UpdateHostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/host.UpdateHostResponse'
+      tags:
+      - hosts
+  /api/v1/hosts/{id}/discover:
+    post:
+      consumes:
+      - application/json
+      description: Trigger SeaTunnel cluster discovery on a specific host via Agent
+      parameters:
+      - description: Host ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/discovery.DiscoveryResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Trigger cluster discovery on a host
+      tags:
+      - Discovery
+  /api/v1/hosts/{id}/discover-processes:
+    post:
+      consumes:
+      - application/json
+      description: Scan for running SeaTunnel processes, returns PID, role, install_dir
+        only
+      parameters:
+      - description: Host ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/discovery.ProcessDiscoveryResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Discover SeaTunnel processes on a host (simplified)
+      tags:
+      - Discovery
+  /api/v1/hosts/{id}/discover/confirm:
+    post:
+      consumes:
+      - application/json
+      description: Confirm discovered clusters and import them into the system
+      parameters:
+      - description: Host ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Confirm request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/discovery.ConfirmDiscoveryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Confirm and import discovered clusters
+      tags:
+      - Discovery
+  /api/v1/hosts/{id}/install:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 安装请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_seatunnel_seatunnelX_internal_apps_installer.InstallationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.InstallResponse'
+      tags:
+      - installation
+  /api/v1/hosts/{id}/install-command:
+    get:
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/host.GetInstallCommandResponse'
+      tags:
+      - hosts
+  /api/v1/hosts/{id}/install/cancel:
+    post:
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.InstallResponse'
+      tags:
+      - installation
+  /api/v1/hosts/{id}/install/retry:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 重试请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/installer.RetryStepRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.InstallResponse'
+      tags:
+      - installation
+  /api/v1/hosts/{id}/install/status:
+    get:
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.InstallResponse'
+      tags:
+      - installation
+  /api/v1/hosts/{id}/precheck:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 预检查参数
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/installer.PrecheckRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.PrecheckResponse'
+      tags:
+      - installation
+  /api/v1/hosts/{id}/tasks:
+    get:
+      parameters:
+      - description: 主机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 返回数量限制
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskListAPIResponse'
+      tags:
+      - tasks
   /api/v1/oauth/callback:
     post:
       parameters:
@@ -611,6 +4452,11 @@ paths:
       - oauth
   /api/v1/oauth/login:
     get:
+      parameters:
+      - description: OAuth provider (github, google)
+        in: query
+        name: provider
+        type: string
       produces:
       - application/json
       responses:
@@ -620,7 +4466,7 @@ paths:
             $ref: '#/definitions/oauth.GetLoginURLResponse'
       tags:
       - oauth
-  /api/v1/oauth/logout:
+  /api/v1/oauth/providers:
     get:
       produces:
       - application/json
@@ -628,10 +4474,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/oauth.LogoutResponse'
+            additionalProperties: true
+            type: object
       tags:
       - oauth
-  /api/v1/oauth/user-info:
+  /api/v1/packages:
     get:
       produces:
       - application/json
@@ -639,63 +4486,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/oauth.UserInfoResponse'
+            $ref: '#/definitions/installer.ListPackagesResponse'
       tags:
-      - oauth
-  /api/v1/projects:
-    get:
-      parameters:
-      - in: query
-        minimum: 1
-        name: current
-        type: integer
-      - in: query
-        maximum: 100
-        minimum: 1
-        name: size
-        type: integer
-      - collectionFormat: csv
-        in: query
-        items:
-          type: string
-        name: tags
-        type: array
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/project.ListProjectsResponse'
-      tags:
-      - project
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 项目信息
-        in: body
-        name: project
-        required: true
-        schema:
-          $ref: '#/definitions/project.CreateProjectRequestBody'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/project.ProjectResponse'
-      tags:
-      - project
-  /api/v1/projects/{id}:
+      - packages
+  /api/v1/packages/{version}:
     delete:
-      consumes:
-      - application/json
       parameters:
-      - description: 项目ID
+      - description: 版本号
         in: path
-        name: id
+        name: version
         required: true
         type: string
       produces:
@@ -704,16 +4503,14 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/project.ProjectResponse'
+            $ref: '#/definitions/installer.DeletePackageResponse'
       tags:
-      - project
+      - packages
     get:
-      description: 获取指定项目所有信息以及领取情况 (Get all information and claim status for a specific
-        project)
       parameters:
-      - description: 项目ID (Project ID)
+      - description: 版本号
         in: path
-        name: id
+        name: version
         required: true
         type: string
       produces:
@@ -722,161 +4519,481 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/project.ProjectResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/project.GetProjectResponseData'
-              type: object
-      summary: 获取指定项目信息 (Get specific project information)
+            $ref: '#/definitions/installer.GetPackageInfoResponse'
       tags:
-      - project
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: 项目ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 项目信息
-        in: body
-        name: project
-        required: true
-        schema:
-          $ref: '#/definitions/project.UpdateProjectRequestBody'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/project.ProjectResponse'
-      tags:
-      - project
-  /api/v1/projects/{id}/receive:
+      - packages
+  /api/v1/packages/download:
     post:
       consumes:
       - application/json
       parameters:
-      - description: project id
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/project.ProjectResponse'
-      tags:
-      - project
-  /api/v1/projects/{id}/receivers:
-    get:
-      consumes:
-      - application/json
-      parameters:
-      - description: 项目ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/project.ProjectResponse'
-      tags:
-      - project
-  /api/v1/projects/{id}/report:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: 项目ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: 举报信息
+      - description: 下载请求
         in: body
-        name: project
+        name: request
         required: true
         schema:
-          $ref: '#/definitions/project.ReportProjectRequestBody'
+          $ref: '#/definitions/installer.DownloadRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/project.ProjectResponse'
+            $ref: '#/definitions/installer.DownloadResponse'
       tags:
-      - project
-  /api/v1/projects/mine:
+      - packages
+  /api/v1/packages/download/{version}:
     get:
       parameters:
-      - in: query
-        minimum: 1
-        name: current
+      - description: 版本号
+        in: path
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.DownloadResponse'
+      tags:
+      - packages
+  /api/v1/packages/download/{version}/cancel:
+    post:
+      parameters:
+      - description: 版本号
+        in: path
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.DownloadResponse'
+      tags:
+      - packages
+  /api/v1/packages/downloads:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.DownloadListResponse'
+      tags:
+      - packages
+  /api/v1/packages/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: 安装包文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: 版本号
+        in: formData
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.UploadPackageResponse'
+      tags:
+      - packages
+  /api/v1/packages/upload/chunk:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: 分片文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: 版本号
+        in: formData
+        name: version
+        required: true
+        type: string
+      - description: 上传会话 ID
+        in: formData
+        name: upload_id
+        required: true
+        type: string
+      - description: 分片索引（从 0 开始）
+        in: formData
+        name: chunk_index
+        required: true
         type: integer
-      - in: query
-        maximum: 100
-        minimum: 1
-        name: size
+      - description: 总分片数
+        in: formData
+        name: total_chunks
+        required: true
         type: integer
-      - collectionFormat: csv
+      - description: 原始文件总大小（字节）
+        in: formData
+        name: total_size
+        required: true
+        type: integer
+      - description: 原始文件名
+        in: formData
+        name: file_name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.UploadChunkResponse'
+      tags:
+      - packages
+  /api/v1/packages/versions/refresh:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/installer.RefreshVersionsResponse'
+      tags:
+      - packages
+  /api/v1/plugins:
+    get:
+      parameters:
+      - description: SeaTunnel 版本
         in: query
-        items:
-          type: string
-        name: tags
-        type: array
+        name: version
+        type: string
+      - description: 镜像源 (apache/aliyun/huaweicloud)
+        in: query
+        name: mirror
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/project.ListProjectsResponse'
+            $ref: '#/definitions/plugin.ListPluginsResponse'
       tags:
-      - project
-  /api/v1/projects/received:
+      - plugins
+  /api/v1/plugins/{name}:
     get:
       parameters:
-      - in: query
-        minimum: 1
-        name: current
-        type: integer
-      - in: query
-        maximum: 100
-        minimum: 1
-        name: size
-        type: integer
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: SeaTunnel 版本
+        in: query
+        name: version
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/project.ListReceiveHistoryResponse'
+            $ref: '#/definitions/plugin.GetPluginInfoResponse'
       tags:
-      - project
-  /api/v1/tags:
+      - plugins
+  /api/v1/plugins/{name}/dependencies:
     get:
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.ListDependenciesResponse'
+      tags:
+      - plugins
+    post:
       consumes:
       - application/json
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 添加依赖请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugin.AddDependencyRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/project.ListTagsResponse'
+            $ref: '#/definitions/plugin.AddDependencyResponse'
       tags:
-      - project
+      - plugins
+  /api/v1/plugins/{name}/dependencies/{depId}:
+    delete:
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 依赖ID
+        in: path
+        name: depId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.DeleteDependencyResponse'
+      tags:
+      - plugins
+  /api/v1/plugins/{name}/download:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 下载请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugin.DownloadPluginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.DownloadPluginResponse'
+      tags:
+      - plugins
+  /api/v1/plugins/{name}/download/status:
+    get:
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 版本号
+        in: query
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.GetDownloadStatusResponse'
+      tags:
+      - plugins
+  /api/v1/plugins/{name}/local:
+    delete:
+      parameters:
+      - description: 插件名称
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: 版本号
+        in: query
+        name: version
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.DeleteLocalPluginResponse'
+      tags:
+      - plugins
+  /api/v1/plugins/download-all:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 下载请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/plugin.DownloadAllPluginsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.DownloadAllPluginsResponse'
+      tags:
+      - plugins
+  /api/v1/plugins/downloads:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.ListActiveDownloadsResponse'
+      tags:
+      - plugins
+  /api/v1/plugins/local:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/plugin.ListLocalPluginsResponse'
+      tags:
+      - plugins
+  /api/v1/tasks:
+    get:
+      parameters:
+      - description: 任务状态过滤
+        in: query
+        name: status
+        type: string
+      - description: 任务类型过滤
+        in: query
+        name: type
+        type: string
+      - description: 返回数量限制
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskListAPIResponse'
+      tags:
+      - tasks
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建任务请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/task.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+      tags:
+      - tasks
+  /api/v1/tasks/{id}:
+    get:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+      tags:
+      - tasks
+  /api/v1/tasks/{id}/cancel:
+    post:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+      tags:
+      - tasks
+  /api/v1/tasks/{id}/retry:
+    post:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+      tags:
+      - tasks
+  /api/v1/tasks/{id}/start:
+    post:
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/task.TaskResponse'
+      tags:
+      - tasks
 swagger: "2.0"

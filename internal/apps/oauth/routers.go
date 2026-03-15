@@ -78,7 +78,7 @@ func GetLoginURL(c *gin.Context) {
 	state := fmt.Sprintf("%s:%s", provider, uuid.NewString())
 	key := fmt.Sprintf(OAuthStateCacheKeyFormat, state)
 
-	// 存储 State 到会话存储（支持内存或 Redis）
+	// 存储 State 到会话存储（默认内存会话）
 	err = session.Store.Set(c.Request.Context(), key, state, OAuthStateCacheKeyExpiration)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, GetLoginURLResponse{ErrorMsg: err.Error()})
@@ -113,7 +113,7 @@ func Callback(c *gin.Context) {
 		return
 	}
 
-	// check state（使用会话存储，支持内存或 Redis）
+	// check state（使用会话存储，默认内存会话）
 	key := fmt.Sprintf(OAuthStateCacheKeyFormat, req.State)
 	storedState, err := session.Store.Get(c.Request.Context(), key)
 	if err != nil || storedState != req.State {

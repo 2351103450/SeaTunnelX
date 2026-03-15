@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2025 linux.do
@@ -33,9 +33,9 @@ import (
 
 var workerCmd = &cobra.Command{
 	Use:   "worker",
-	Short: "CDK Worker",
+	Short: "Legacy worker shell",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("[Worker] 启动任务处理服务")
+		log.Println("[Worker] legacy worker 模式已移除，保留命令壳用于兼容")
 		if err := worker.StartWorker(); err != nil {
 			log.Fatalf("[工作器] 启动失败: %v", err)
 		}

@@ -30,8 +30,8 @@ import (
 
 // **Feature: seatunnel-platform-login, Property 5: Session store consistency**
 // **Validates: Requirements 4.3**
-// 测试会话存储的一致性行为：对于任何会话操作（创建、读取、删除），
-// 无论使用内存存储还是 Redis 存储，行为应该一致
+// 测试内存会话存储的一致性行为：对于任何会话操作（创建、读取、删除），
+// MemoryStore 都应满足相同的基本行为约束。
 
 // TestProperty_SessionStoreSetGetConsistency 测试 Set 后 Get 应返回相同的值
 func TestProperty_SessionStoreSetGetConsistency(t *testing.T) {

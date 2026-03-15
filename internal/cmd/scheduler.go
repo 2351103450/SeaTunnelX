@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2025 linux.do
@@ -33,9 +33,9 @@ import (
 
 var schedulerCmd = &cobra.Command{
 	Use:   "scheduler",
-	Short: "CDK Scheduler",
+	Short: "Legacy scheduler shell",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("[Scheduler] 启动定时任务调度服务")
+		log.Println("[Scheduler] legacy 调度模式已移除，保留命令壳用于兼容")
 		if err := schedule.StartScheduler(); err != nil {
 			log.Fatalf("[调度器] 启动失败: %v", err)
 		}

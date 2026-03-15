@@ -1,4 +1,4 @@
-﻿/*
+/*
  * MIT License
  *
  * Copyright (c) 2025 linux.do
@@ -31,11 +31,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/hibiken/asynq"
-	"github.com/seatunnel/seatunnelX/internal/logger"
-	"github.com/seatunnel/seatunnelX/internal/task"
-	"github.com/seatunnel/seatunnelX/internal/task/schedule"
-
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/seatunnel/seatunnelX/internal/config"
@@ -58,7 +53,7 @@ func GetUserIDFromContext(c *gin.Context) uint64 {
 	return GetUserIDFromSession(session)
 }
 
-// GetUserFromContext 从Context中获取User对象
+// GetUserFromContext 从Context中获取User对象。
 func GetUserFromContext(c *gin.Context) (*User, bool) {
 	user, exists := c.Get(UserObjKey)
 	if !exists {
@@ -68,24 +63,21 @@ func GetUserFromContext(c *gin.Context) (*User, bool) {
 	return u, ok
 }
 
-// SetUserToContext 将User对象存储到Context中
+// SetUserToContext 将User对象存储到Context中。
 func SetUserToContext(c *gin.Context, user *User) {
 	c.Set(UserObjKey, user)
 }
 
 func doOAuth(ctx context.Context, code string) (*User, error) {
-	// init trace
 	ctx, span := otel_trace.Start(ctx, "OAuth")
 	defer span.End()
 
-	// get token
 	token, err := oauthConf.Exchange(ctx, code)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	// get user info
 	client := oauthConf.Client(ctx, token)
 	resp, err := client.Get(config.Config.OAuth2.UserEndpoint)
 	if err != nil {
@@ -94,12 +86,12 @@ func doOAuth(ctx context.Context, code string) (*User, error) {
 	}
 	defer func(body io.ReadCloser) { _ = resp.Body.Close() }(resp.Body)
 
-	// load user info
 	responseData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
+
 	var userInfo LegacyOAuthUserInfo
 	if err = json.Unmarshal(responseData, &userInfo); err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -111,11 +103,9 @@ func doOAuth(ctx context.Context, code string) (*User, error) {
 		return nil, err
 	}
 
-	// save to db
 	var user User
 	tx := db.DB(ctx).Where("id = ?", userInfo.Id).First(&user)
 	if tx.Error != nil {
-		// create user
 		if errors.Is(tx.Error, gorm.ErrRecordNotFound) {
 			user = User{
 				ID:          userInfo.Id,
@@ -131,18 +121,7 @@ func doOAuth(ctx context.Context, code string) (*User, error) {
 				span.SetStatus(codes.Error, tx.Error.Error())
 				return nil, tx.Error
 			}
-			// 为新注册用户下发计算徽章分数的任务
-			payload, _ := json.Marshal(map[string]interface{}{
-				"user_id": user.ID,
-			})
-
-			if _, errTask := schedule.AsynqClient.Enqueue(asynq.NewTask(task.UpdateSingleUserBadgeScoreTask, payload)); errTask != nil {
-				logger.ErrorF(ctx, "下发用户[%s]徽章分数计算任务失败: %v", user.Username, errTask)
-			} else {
-				logger.InfoF(ctx, "下发用户[%s]徽章分数计算任务成功", user.Username)
-			}
 		} else {
-			// response failed
 			span.SetStatus(codes.Error, tx.Error.Error())
 			return nil, tx.Error
 		}
@@ -152,7 +131,6 @@ func doOAuth(ctx context.Context, code string) (*User, error) {
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
-		// update user
 		user.Username = userInfo.Username
 		user.Nickname = userInfo.Name
 		user.AvatarUrl = userInfo.AvatarUrl
@@ -165,5 +143,6 @@ func doOAuth(ctx context.Context, code string) (*User, error) {
 			return nil, tx.Error
 		}
 	}
+
 	return &user, nil
 }
