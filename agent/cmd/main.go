@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -65,6 +66,8 @@ var (
 	GitCommit = "unknown"
 	BuildTime = "unknown"
 )
+
+var agentLogTimestampPattern = regexp.MustCompile(`\b(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:,\d{3})?)\b`)
 
 // Agent represents the main agent service that integrates all components
 // Agent 表示集成所有组件的主要 Agent 服务
@@ -1314,6 +1317,8 @@ func (a *Agent) handleCollectLogsCommand(ctx context.Context, cmd *pb.CommandReq
 	// date: specific date for rolling log files (e.g., "2025-12-18")
 	// date: 滚动日志文件的特定日期（如 "2025-12-18"）
 	date := getParamString(cmd.Parameters, "date", "")
+	startTimeRaw := getParamString(cmd.Parameters, "start_time", "")
+	endTimeRaw := getParamString(cmd.Parameters, "end_time", "")
 
 	// If date is specified, try to find the dated log file
 	// 如果指定了日期，尝试查找带日期的日志文件
@@ -1424,7 +1429,15 @@ func (a *Agent) handleCollectLogsCommand(ctx context.Context, cmd *pb.CommandReq
 	case "all":
 		// Read entire file (limited) / 读取整个文件（有限制）
 		output, err = os.ReadFile(actualLogFile)
-		if err == nil && len(output) > 500*1024 {
+		if err == nil && (startTimeRaw != "" || endTimeRaw != "") {
+			startTime, parseStartErr := parseAgentLogWindowTime(startTimeRaw)
+			endTime, parseEndErr := parseAgentLogWindowTime(endTimeRaw)
+			if parseStartErr != nil || parseEndErr != nil {
+				return executor.CreateErrorResponse(cmd.CommandId, fmt.Sprintf("Failed to parse time window: start=%v end=%v / 解析时间窗失败: start=%v end=%v", parseStartErr, parseEndErr, parseStartErr, parseEndErr)), nil
+			}
+			filtered := filterAgentLogWindowContent(string(output), startTime, endTime)
+			output = []byte(filtered)
+		} else if err == nil && len(output) > 500*1024 {
 			// Limit to 500KB / 限制为 500KB
 			output = output[:500*1024]
 			output = append(output, []byte("\n... [truncated / 已截断] ...")...)
@@ -1475,6 +1488,87 @@ func (a *Agent) handleThreadDumpCommand(ctx context.Context, cmd *pb.CommandRequ
 
 	reporter.Report(100, "Thread dump collected / 线程栈采集完成")
 	return executor.CreateSuccessResponse(cmd.CommandId, payload), nil
+}
+
+func parseAgentLogWindowTime(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return parsed, nil
+}
+
+func filterAgentLogWindowContent(content string, start, end time.Time) string {
+	if strings.TrimSpace(content) == "" {
+		return ""
+	}
+	if !start.IsZero() {
+		start = start.Local()
+	}
+	if !end.IsZero() {
+		end = end.Local()
+	}
+	type logEntry struct {
+		ts      time.Time
+		hasTime bool
+		lines   []string
+	}
+	appendLine := func(entries []logEntry, current *logEntry, line string) ([]logEntry, *logEntry) {
+		if current == nil {
+			entries = append(entries, logEntry{lines: []string{line}})
+			return entries, &entries[len(entries)-1]
+		}
+		current.lines = append(current.lines, line)
+		return entries, current
+	}
+
+	entries := make([]logEntry, 0, 256)
+	var current *logEntry
+	for _, line := range strings.Split(content, "\n") {
+		if ts, ok := parseAgentLogTimestamp(line); ok {
+			entries = append(entries, logEntry{
+				ts:      ts,
+				hasTime: true,
+				lines:   []string{line},
+			})
+			current = &entries[len(entries)-1]
+			continue
+		}
+		entries, current = appendLine(entries, current, line)
+	}
+
+	filtered := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.hasTime {
+			if !start.IsZero() && entry.ts.Before(start) {
+				continue
+			}
+			if !end.IsZero() && entry.ts.After(end) {
+				continue
+			}
+		}
+		filtered = append(filtered, entry.lines...)
+	}
+	return strings.TrimSpace(strings.Join(filtered, "\n"))
+}
+
+func parseAgentLogTimestamp(line string) (time.Time, bool) {
+	matches := agentLogTimestampPattern.FindStringSubmatch(line)
+	if len(matches) != 2 {
+		return time.Time{}, false
+	}
+	value := strings.TrimSpace(matches[1])
+	layouts := []string{"2006-01-02 15:04:05,000", "2006-01-02 15:04:05"}
+	for _, layout := range layouts {
+		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (a *Agent) handleJVMDumpCommand(ctx context.Context, cmd *pb.CommandRequest, reporter executor.ProgressReporter) (*pb.CommandResponse, error) {

@@ -63,7 +63,7 @@ func (f *fakeDiagnosticProcessEventReader) ListClusterEvents(_ context.Context, 
 	return f.clusterEvents, nil
 }
 
-func TestResolveDiagnosticCollectionWindow_prefersTaskLookbackAndInspectionFinishAt(t *testing.T) {
+func TestResolveDiagnosticCollectionWindow_prefersTaskLookbackAndCurrentTimeWhenTaskOverrides(t *testing.T) {
 	finishedAt := time.Date(2026, 3, 14, 10, 30, 0, 0, time.UTC)
 	task := &DiagnosticTask{LookbackMinutes: 90}
 	detail := &ClusterInspectionReportDetailData{
@@ -78,10 +78,11 @@ func TestResolveDiagnosticCollectionWindow_prefersTaskLookbackAndInspectionFinis
 	if window.LookbackMinutes != 90 {
 		t.Fatalf("expected lookback 90, got %d", window.LookbackMinutes)
 	}
-	if !window.End.Equal(finishedAt) {
-		t.Fatalf("expected end %s, got %s", finishedAt, window.End)
+	now := time.Now().UTC()
+	if window.End.Before(now.Add(-5*time.Second)) || window.End.After(now.Add(5*time.Second)) {
+		t.Fatalf("expected end near now, got %s (finishedAt=%s)", window.End, finishedAt)
 	}
-	expectedStart := finishedAt.Add(-90 * time.Minute)
+	expectedStart := window.End.Add(-90 * time.Minute)
 	if !window.Start.Equal(expectedStart) {
 		t.Fatalf("expected start %s, got %s", expectedStart, window.Start)
 	}

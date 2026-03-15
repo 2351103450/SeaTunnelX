@@ -2051,6 +2051,7 @@ func (s *Service) executeRenderHTMLSummaryStep(ctx context.Context, task *Diagno
 func resolveDiagnosticCollectionWindow(task *DiagnosticTask, inspectionDetail *ClusterInspectionReportDetailData) diagnosticCollectionWindow {
 	end := time.Now().UTC()
 	lookbackMinutes := 0
+	taskOverridesWindow := false
 	if inspectionDetail != nil && inspectionDetail.Report != nil {
 		report := inspectionDetail.Report
 		if report.FinishedAt != nil && !report.FinishedAt.IsZero() {
@@ -2064,6 +2065,10 @@ func resolveDiagnosticCollectionWindow(task *DiagnosticTask, inspectionDetail *C
 	}
 	if task != nil && task.LookbackMinutes >= minInspectionLookbackMinutes && task.LookbackMinutes <= maxInspectionLookbackMinutes {
 		lookbackMinutes = task.LookbackMinutes
+		taskOverridesWindow = true
+	}
+	if taskOverridesWindow {
+		end = time.Now().UTC()
 	}
 	if lookbackMinutes == 0 {
 		lookbackMinutes = defaultInspectionLookbackMinutes
@@ -3799,8 +3804,10 @@ func (s *Service) collectDiagnosticWindowedLogSnippet(ctx context.Context, targe
 	days := diagnosticWindowDays(window.Start, window.End)
 	for _, day := range days {
 		params := map[string]string{
-			"log_file": candidate,
-			"mode":     "all",
+			"log_file":   candidate,
+			"mode":       "all",
+			"start_time": window.Start.Format(time.RFC3339),
+			"end_time":   window.End.Format(time.RFC3339),
 		}
 		if isDiagnosticCurrentLogDay(day, window.End) {
 			// current active file
