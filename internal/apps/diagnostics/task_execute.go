@@ -3994,7 +3994,7 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
     a { color: var(--primary); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .page {
-      max-width: 1360px;
+      max-width: 1520px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
@@ -4305,7 +4305,8 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
     .table-wrap {
       border: 1px solid var(--border);
       border-radius: 14px;
-      overflow: hidden;
+      overflow-x: auto;
+      overflow-y: hidden;
       margin-top: 14px;
       background: #fff;
     }
@@ -4343,6 +4344,50 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
     .process-events-table td:nth-child(4) {
       width: 92px;
       min-width: 92px;
+    }
+    .metric-signals-table th {
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+    }
+    .metric-signals-table {
+      width: max-content;
+      min-width: 100%;
+    }
+    .metric-signals-table th:first-child,
+    .metric-signals-table td:first-child {
+      width: 132px;
+      min-width: 132px;
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+    }
+    .metric-signals-table th:nth-child(2),
+    .metric-signals-table td:nth-child(2) {
+      width: 392px;
+      min-width: 392px;
+    }
+    .metric-signals-table th:nth-child(3),
+    .metric-signals-table td:nth-child(3) {
+      width: 132px;
+      min-width: 132px;
+      white-space: nowrap;
+    }
+    .metric-signals-table th:nth-child(4),
+    .metric-signals-table td:nth-child(4) {
+      width: 84px;
+      min-width: 84px;
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+    }
+    .metric-signals-table th:nth-child(5),
+    .metric-signals-table td:nth-child(5) {
+      width: 88px;
+      min-width: 88px;
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
     }
     th {
       background: #f8fbff;
@@ -4817,7 +4862,7 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
             <details>
               <summary>查看原始运行配置文件清单 / View raw runtime config files</summary>
               <div class="table-wrap">
-                <table>
+                <table class="metric-signals-table">
                   <thead>
                     <tr>
                       <th>Host</th>
@@ -5122,7 +5167,6 @@ const diagnosticBundleHTMLTemplate = `<!DOCTYPE html>
             {{end}}
             <div class="dl-row"><div class="dl-term">Thread Dump</div><div class="dl-value">{{if .Task.Options.IncludeThreadDump}}Enabled{{else}}Disabled{{end}}</div></div>
             <div class="dl-row"><div class="dl-term">JVM Dump</div><div class="dl-value">{{if .Task.Options.IncludeJVMDump}}Enabled{{else}}Disabled{{end}}</div></div>
-            <div class="dl-row"><div class="dl-term">Log Sample Lines</div><div class="dl-value">{{.Task.Options.LogSampleLines}}</div></div>
             <div class="dl-row"><div class="dl-term">Min Free Space for JVM Dump</div><div class="dl-value">{{.Task.Options.JVMDumpMinFreeMB}} MB</div></div>
           </div>
         </div>
