@@ -50,7 +50,8 @@ public class ConfigValidationService {
     public Map<String, Object> validate(Map<String, Object> request) {
         boolean testConnection = ProxyRequestUtils.getBoolean(request, "testConnection", false);
         JobConfigContext context = jobConfigSupportService.parseJobContext(request);
-        List<String> warnings = new ArrayList<>(context.getWarnings());
+        List<String> warnings = filterUserVisibleWarnings(context.getWarnings());
+        List<String> infos = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         List<Map<String, Object>> checks = new ArrayList<>();
 
@@ -66,11 +67,19 @@ public class ConfigValidationService {
                                     check.get("connectorType"), check.get("message")));
                     allChecksSucceeded = false;
                 } else if (!"success".equals(status)) {
-                    warnings.add(
-                            String.format(
-                                    "%s 未完成连接测试: %s",
-                                    check.get("connectorType"), check.get("message")));
-                    allChecksSucceeded = false;
+                    String severity = String.valueOf(check.get("severity"));
+                    if ("info".equals(severity)) {
+                        infos.add(
+                                String.format(
+                                        "%s 无需连接测试: %s",
+                                        check.get("connectorType"), check.get("message")));
+                    } else {
+                        warnings.add(
+                                String.format(
+                                        "%s 暂未完成连接测试: %s",
+                                        check.get("connectorType"), check.get("message")));
+                        allChecksSucceeded = false;
+                    }
                 }
             }
         }
@@ -81,6 +90,7 @@ public class ConfigValidationService {
         result.put("valid", passed);
         result.put("errors", errors);
         result.put("warnings", warnings);
+        result.put("infos", infos);
         result.put("checks", checks);
         result.put(
                 "summary",
@@ -143,9 +153,17 @@ public class ConfigValidationService {
                         pluginName));
         result.put("target", StringUtils.defaultString(getString(config, "url")));
 
+        if (doesNotRequireConnectionProbe(pluginName)) {
+            result.put("status", "skipped");
+            result.put("severity", "info");
+            result.put("message", "该连接器不依赖外部服务，无需连接测试。");
+            return result;
+        }
+
         if (!"Jdbc".equalsIgnoreCase(pluginName)) {
             result.put("status", "skipped");
-            result.put("message", "This connector does not implement connection probing yet.");
+            result.put("severity", "warning");
+            result.put("message", "该连接器暂不支持连接探测，请通过配置预览或实际运行进一步验证。");
             return result;
         }
 
@@ -159,6 +177,29 @@ public class ConfigValidationService {
             result.put("message", firstLine(e.getMessage()));
             return result;
         }
+    }
+
+    /**
+     * 过滤仅用于内部调试的兼容提示，避免在连接测试结果里误导用户。 Filters internal compatibility hints so connection test
+     * results do not confuse users.
+     */
+    private List<String> filterUserVisibleWarnings(List<String> warnings) {
+        List<String> result = new ArrayList<>();
+        for (String warning : warnings) {
+            if (StringUtils.startsWith(warning, "Simple graph compatibility linked ")) {
+                continue;
+            }
+            result.add(warning);
+        }
+        return result;
+    }
+
+    /**
+     * 判断连接器是否天然不需要外部连接探测。 Detects connectors that naturally do not need external connection
+     * probing.
+     */
+    private boolean doesNotRequireConnectionProbe(String pluginName) {
+        return "FakeSource".equalsIgnoreCase(pluginName) || "Console".equalsIgnoreCase(pluginName);
     }
 
     private void probeJdbc(Config config, ClassLoader classLoader) throws Exception {

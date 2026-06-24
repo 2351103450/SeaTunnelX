@@ -393,9 +393,8 @@ public class JobConfigSupportService {
                             e);
                     throw new ProxyException(
                             400,
-                            String.format(
-                                    "Source[%d]-%s official tablePath resolution failed: %s",
-                                    i, readonlyConfig.get(PLUGIN_NAME), summarizeException(e)),
+                            buildOfficialResolutionError(
+                                    "Source", i, readonlyConfig.get(PLUGIN_NAME), e),
                             e);
                 }
             }
@@ -422,9 +421,8 @@ public class JobConfigSupportService {
                             e);
                     throw new ProxyException(
                             400,
-                            String.format(
-                                    "Transform[%d]-%s official tablePath resolution failed: %s",
-                                    i, readonlyConfig.get(PLUGIN_NAME), summarizeException(e)),
+                            buildOfficialResolutionError(
+                                    "Transform", i, readonlyConfig.get(PLUGIN_NAME), e),
                             e);
                 }
             }
@@ -448,9 +446,8 @@ public class JobConfigSupportService {
                             e);
                     throw new ProxyException(
                             400,
-                            String.format(
-                                    "Sink[%d]-%s official tablePath resolution failed: %s",
-                                    i, readonlyConfig.get(PLUGIN_NAME), summarizeException(e)),
+                            buildOfficialResolutionError(
+                                    "Sink", i, readonlyConfig.get(PLUGIN_NAME), e),
                             e);
                 }
             }
@@ -716,6 +713,45 @@ public class JobConfigSupportService {
             depth += 1;
         }
         return builder.toString();
+    }
+
+    /**
+     * 将缺少连接器的底层 Factory 异常转换为预览场景下可执行的用户提示。 Converts missing-connector factory failures into
+     * actionable preview messages.
+     */
+    static String buildOfficialResolutionError(
+            String nodeKind, int index, String pluginName, Throwable throwable) {
+        String normalizedPluginName = StringUtils.defaultIfBlank(pluginName, "Unknown");
+        if (isPluginNotFound(throwable, normalizedPluginName)) {
+            return String.format(
+                    "%s[%d]-%s 连接器未安装，请先给当前集群安装 %s 连接器后再预览配置。",
+                    nodeKind, index, normalizedPluginName, normalizedPluginName);
+        }
+        return String.format(
+                "%s[%d]-%s official tablePath resolution failed: %s",
+                nodeKind, index, normalizedPluginName, summarizeException(throwable));
+    }
+
+    /**
+     * 判断异常链是否表示 SeaTunnel connector provider 未安装。 Detects whether the throwable chain represents a
+     * missing SeaTunnel connector provider.
+     */
+    private static boolean isPluginNotFound(Throwable throwable, String pluginName) {
+        String expectedPlugin = StringUtils.trimToEmpty(pluginName).toLowerCase();
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth < 6) {
+            String message = StringUtils.defaultString(current.getMessage()).toLowerCase();
+            if (message.contains("pluginidentifier")
+                    && message.contains("not found")
+                    && (StringUtils.isBlank(expectedPlugin)
+                            || message.contains("pluginname='" + expectedPlugin + "'"))) {
+                return true;
+            }
+            current = current.getCause();
+            depth += 1;
+        }
+        return false;
     }
 
     private static final class OfficialNodeDisplayInfo {
