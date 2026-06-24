@@ -18,6 +18,7 @@
 # - 后端使用 PM2 启动（seatunnelx-api）
 # - 前端默认使用 Next.js standalone 产物 + PM2 启动（seatunnelx-ui）
 # - 支持统一的目标（前端/后端）与动作（构建/重启）
+# - 后端构建后默认同步并重启已安装的本机 seatunnelx-agent
 # - 启动前会检测并清理同名 PM2 进程，最后执行 pm2 save
 
 set -euo pipefail
@@ -34,7 +35,7 @@ SeaTunnelX 构建/重启脚本
   ./scripts/restart.sh [选项]
 
 选项:
-  --build-only     仅构建（不重启）
+  --build-only     仅构建（不重启前后端 PM2；本机已安装 Agent 时仍默认同步/重启）
   --restart-only   仅重启（不构建）
   --frontend-only  仅处理前端
   --backend-only   仅处理后端
@@ -42,17 +43,20 @@ SeaTunnelX 构建/重启脚本
   --no-frontend    兼容旧参数，跳过前端
   --no-backend     跳过后端
   --frontend-dev   前端用 pnpm run dev 启动（仅重启前端时生效）
+  --no-local-agent-restart
+                   后端构建后不同步/不重启本机 seatunnelx-agent（默认仅在本机已安装时同步并重启）
   --restart-java-proxy
                    构建/重启后，重启本机 seatunnelx-java-proxy
   --stop-frontend  仅停止前端 PM2 进程并退出
   -h, --help       显示本帮助
 
 示例:
-  ./scripts/restart.sh                               # 默认：构建并重启前后端
+  ./scripts/restart.sh                               # 默认：构建并重启前后端；本机已安装 Agent 时同步/重启
   ./scripts/restart.sh --restart-only --frontend-only # 仅重启前端
-  ./scripts/restart.sh --build-only --backend-only    # 仅构建后端
+  ./scripts/restart.sh --build-only --backend-only    # 构建后端；本机已安装 Agent 时同步/重启
+  ./scripts/restart.sh --backend-only --no-local-agent-restart
   ./scripts/restart.sh --backend-only --restart-java-proxy
-  ./scripts/restart.sh --build-only                   # 仅构建前后端，不重启
+  ./scripts/restart.sh --build-only                   # 仅构建前后端；本机已安装 Agent 时同步/重启
 
 环境变量:
   PM2_API                        后端 PM2 进程名，默认 seatunnelx-api
@@ -61,6 +65,10 @@ SeaTunnelX 构建/重启脚本
   APP_EXTERNAL_URL               写入 config.yaml 的 app.external_url，默认 http://127.0.0.1:8000
   FRONTEND_PORT                  前端端口，默认 80
   NEXT_PUBLIC_BACKEND_BASE_URL   前端访问后端的基础地址，默认 http://127.0.0.1:8000
+  LOCAL_AGENT_INSTALL_DIR        本机 Agent 安装目录，默认 /usr/local/bin
+  LOCAL_AGENT_BINARY             本机 Agent 二进制名，默认 seatunnelx-agent
+  LOCAL_AGENT_SERVICE            本机 Agent systemd 服务名，默认 seatunnelx-agent
+  LOCAL_AGENT_RESTART            本机已安装 Agent 时是否默认同步/重启，默认 true
   LOCAL_SEATUNNEL_HOME           本机 SeaTunnel 安装目录，默认 /opt/seatunnel-2.3.13-new
   LOCAL_JAVA_PROXY_PORT          本机 seatunnelx-java-proxy 端口，默认 18080
   CONTROL_PLANE_BASE_URL         控制面地址，默认 http://127.0.0.1:8000
@@ -79,6 +87,14 @@ BACKEND_ONLY=false
 STOP_FRONTEND=false
 FRONTEND_DEV=false
 RESTART_JAVA_PROXY=false
+case "${LOCAL_AGENT_RESTART:-true}" in
+  true|TRUE|1|yes|YES|y|Y) RESTART_LOCAL_AGENT=true ;;
+  false|FALSE|0|no|NO|n|N) RESTART_LOCAL_AGENT=false ;;
+  *)
+    echo "LOCAL_AGENT_RESTART 取值无效: ${LOCAL_AGENT_RESTART}（支持 true/false）"
+    exit 1
+    ;;
+esac
 while [[ $# -gt 0 ]]; do
   arg="$1"
   case "$arg" in
@@ -95,6 +111,7 @@ while [[ $# -gt 0 ]]; do
     --no-frontend) NO_FRONTEND=true ;;
     --no-backend) NO_BACKEND=true ;;
     --stop-frontend) STOP_FRONTEND=true ;;
+    --no-local-agent-restart) RESTART_LOCAL_AGENT=false ;;
     --restart-java-proxy) RESTART_JAVA_PROXY=true ;;
     *)
       echo "未知参数: $arg"
@@ -152,6 +169,9 @@ APP_EXTERNAL_URL="${APP_EXTERNAL_URL:-http://127.0.0.1:8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-80}"
 NEXT_PUBLIC_BACKEND_BASE_URL="${NEXT_PUBLIC_BACKEND_BASE_URL:-http://127.0.0.1:8000}"
 CAPABILITY_PROXY_DEFAULT_VERSION="${CAPABILITY_PROXY_DEFAULT_VERSION:-2.3.13}"
+LOCAL_AGENT_INSTALL_DIR="${LOCAL_AGENT_INSTALL_DIR:-/usr/local/bin}"
+LOCAL_AGENT_BINARY="${LOCAL_AGENT_BINARY:-seatunnelx-agent}"
+LOCAL_AGENT_SERVICE="${LOCAL_AGENT_SERVICE:-seatunnelx-agent}"
 AGENT_HOME="${AGENT_HOME:-/usr/local/lib/seatunnelx-agent}"
 AGENT_PROXY_LIB_DIR="${AGENT_PROXY_LIB_DIR:-$AGENT_HOME/lib}"
 LOCAL_SEATUNNEL_HOME="${LOCAL_SEATUNNEL_HOME:-/opt/seatunnel-2.3.13-new}"
@@ -188,6 +208,24 @@ detect_agent_goarch() {
   go env GOARCH
 }
 
+detect_host_goos() {
+  go env GOHOSTOS 2>/dev/null || uname -s | tr '[:upper:]' '[:lower:]'
+}
+
+detect_host_goarch() {
+  local host_arch=""
+  host_arch="$(go env GOHOSTARCH 2>/dev/null || true)"
+  if [[ -n "$host_arch" ]]; then
+    echo "$host_arch"
+    return 0
+  fi
+  case "$(uname -m)" in
+    x86_64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) uname -m ;;
+  esac
+}
+
 agent_binary_name_for_target() {
   local goos="$1"
   local goarch="$2"
@@ -209,6 +247,62 @@ agent_binary_name_for_target() {
   esac
 
   echo "seatunnelx-agent-${goos}-${goarch}"
+}
+
+sync_and_restart_local_agent() {
+  local built_binary="$1"
+  local target_goos="$2"
+  local target_goarch="$3"
+  local host_goos=""
+  local host_goarch=""
+  local target_path="${LOCAL_AGENT_INSTALL_DIR}/${LOCAL_AGENT_BINARY}"
+  local temp_path="${target_path}.new"
+
+  host_goos="$(detect_host_goos)"
+  host_goarch="$(detect_host_goarch)"
+
+  if [[ "$target_goos" != "$host_goos" || "$target_goarch" != "$host_goarch" ]]; then
+    echo "      跳过本机 Agent 同步：构建目标 ${target_goos}/${target_goarch} 与本机 ${host_goos}/${host_goarch} 不一致."
+    return 0
+  fi
+
+  if [[ "$target_goos" != "linux" ]]; then
+    echo "      跳过本机 Agent 重启：当前脚本仅自动管理 Linux systemd 服务."
+    return 0
+  fi
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "      未找到 systemctl，跳过本机 Agent 同步/重启."
+    return 0
+  fi
+
+  if ! systemctl cat "$LOCAL_AGENT_SERVICE" >/dev/null 2>&1; then
+    echo "      未找到本机 Agent systemd 服务 ${LOCAL_AGENT_SERVICE}，跳过同步/重启."
+    return 0
+  fi
+
+  if [[ ! -e "$target_path" ]]; then
+    echo "      未检测到本机 Agent 二进制 ${target_path}，跳过同步/重启."
+    return 0
+  fi
+
+  if [[ ! -f "$built_binary" ]]; then
+    echo "      未找到已构建的 Agent 二进制: $built_binary"
+    return 1
+  fi
+
+  cp -f "$built_binary" "$temp_path"
+  chmod +x "$temp_path"
+  mv -f "$temp_path" "$target_path"
+  echo "      已同步本机 Agent 到 ${target_path}."
+
+  systemctl restart "$LOCAL_AGENT_SERVICE"
+  if systemctl is-active --quiet "$LOCAL_AGENT_SERVICE"; then
+    echo "      本机 Agent 服务已重启: ${LOCAL_AGENT_SERVICE}."
+  else
+    echo "      本机 Agent 服务重启后未处于 active 状态: ${LOCAL_AGENT_SERVICE}"
+    return 1
+  fi
 }
 
 is_java_proxy_pid() {
@@ -552,6 +646,7 @@ fi
 
 total=0
 if $DO_BUILD && $RUN_BACKEND; then total=$((total + 3)); fi
+if $DO_BUILD && $RUN_BACKEND && $RESTART_LOCAL_AGENT; then total=$((total + 1)); fi
 if $DO_BUILD && $RUN_FRONTEND && ! ($FRONTEND_DEV && $DO_RESTART); then total=$((total + 1)); fi
 if $DO_RESTART && $RUN_BACKEND; then total=$((total + 1)); fi
 if $DO_RESTART && $RUN_FRONTEND; then total=$((total + 1)); fi
@@ -606,6 +701,11 @@ if $DO_BUILD && $RUN_BACKEND; then
     fi
   else
     echo "      未找到 mvn，跳过 seatunnelx-java-proxy 薄 jar 构建与同步."
+  fi
+
+  if $RESTART_LOCAL_AGENT; then
+    step=$((step + 1)); echo "[$step/$total] 同步并重启本机 seatunnelx-agent ..."
+    sync_and_restart_local_agent "agent/seatunnelx-agent" "$agent_goos" "$agent_goarch"
   fi
 fi
 

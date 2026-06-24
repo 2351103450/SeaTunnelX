@@ -61,9 +61,6 @@ validate_seatunnel_home() {
   if [ ! -f "${SEATUNNEL_HOME}/bin/seatunnel.sh" ]; then
     fail_preflight "seatunnel.sh missing under ${SEATUNNEL_HOME}/bin/seatunnel.sh"
   fi
-  if [ ! -d "${SEATUNNEL_HOME}/connectors" ] && [ ! -d "${SEATUNNEL_HOME}/plugins" ]; then
-    fail_preflight "connectors/plugins directory missing under ${SEATUNNEL_HOME}"
-  fi
 }
 
 proxy_version_candidates() {
@@ -135,20 +132,6 @@ JAVA_OPTS="${JAVA_OPTS} -Dseatunnelx.java.proxy.seatunnel.home=${SEATUNNEL_HOME}
 
 CLASS_PATH=${SEATUNNEL_HOME}/lib/*:${APP_JAR}:${PROXY_JAR}
 
-append_plugin_jars() {
-  local plugin_dir="$1"
-  local jar_list_file
-  if [ ! -d "${plugin_dir}" ]; then
-    return
-  fi
-  jar_list_file=$(mktemp)
-  find "${plugin_dir}" -type f -name '*.jar' | sort > "${jar_list_file}"
-  while IFS= read -r jar_path; do
-    CLASS_PATH=${CLASS_PATH}:${jar_path}
-  done < "${jar_list_file}"
-  rm -f "${jar_list_file}"
-}
-
 resolve_proxy_port() {
   local port="${SEATUNNELX_JAVA_PROXY_PORT:-}"
   local arg
@@ -196,16 +179,6 @@ kill_existing_proxy_listener() {
   done
 }
 
-if [ -d "${SEATUNNEL_HOME}/connectors" ]; then
-  CLASS_PATH=${CLASS_PATH}:${SEATUNNEL_HOME}/connectors/*
-fi
-if [ -d "${SEATUNNEL_HOME}/plugins" ]; then
-  for plugin_dir in "${SEATUNNEL_HOME}"/plugins/*; do
-    if [ -d "${plugin_dir}" ]; then
-      append_plugin_jars "${plugin_dir}"
-    fi
-  done
-fi
 if [ -n "${EXTRA_PROXY_CLASSPATH:-}" ]; then
   CLASS_PATH=${CLASS_PATH}:${EXTRA_PROXY_CLASSPATH}
 fi

@@ -57,7 +57,10 @@ public class PluginOptionSchemaService {
     public PluginOptionSchemaResult inspect(Map<String, Object> request) {
         PluginRuntimeService.PluginExecutionContext context =
                 pluginRuntimeService.openContext(request);
+        Thread currentThread = Thread.currentThread();
+        ClassLoader originalClassLoader = currentThread.getContextClassLoader();
         try {
+            currentThread.setContextClassLoader(context.getClassLoader());
             String factoryIdentifier =
                     ProxyRequestUtils.getRequiredString(request, "factoryIdentifier");
             boolean includeSupplement =
@@ -111,6 +114,7 @@ public class PluginOptionSchemaService {
             SCHEMA_CACHE.put(cacheKey, result);
             return result;
         } finally {
+            currentThread.setContextClassLoader(originalClassLoader);
             context.close();
         }
     }

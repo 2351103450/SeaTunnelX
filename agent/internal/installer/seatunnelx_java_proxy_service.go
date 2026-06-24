@@ -25,11 +25,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/seatunnel/seatunnelX/agent/internal/logger"
 	seatunnelmeta "github.com/seatunnel/seatunnelX/internal/seatunnel"
 )
 
@@ -201,10 +203,10 @@ func StopManagedSeatunnelXJavaProxyService(ctx context.Context, installDir strin
 		return status, err
 	}
 	if waitErr := waitForSeatunnelXJavaProxyShutdown(ctx, status.Endpoint, status.PID, seatunnelxJavaProxyStopTimeout); waitErr != nil {
-		_ = process.Signal(syscall.SIGKILL)
-		if killWaitErr := waitForSeatunnelXJavaProxyShutdown(ctx, status.Endpoint, status.PID, 3*time.Second); killWaitErr != nil {
+		logger.WarnF(ctx, "[seatunnelx-java-proxy] graceful stop timed out, force killing managed process: pid=%d, port=%d, error=%v", status.PID, status.Port, waitErr)
+		if killErr := forceKillSeatunnelXJavaProxyProcesses(ctx, status); killErr != nil {
 			status.Message = "failed to stop seatunnelx-java-proxy service"
-			return status, waitErr
+			return status, fmt.Errorf("%w; force kill failed: %v", waitErr, killErr)
 		}
 	}
 
@@ -225,6 +227,52 @@ func StopManagedSeatunnelXJavaProxyService(ctx context.Context, installDir strin
 	}
 	stoppedStatus.Message = "seatunnelx-java-proxy service stopped"
 	return stoppedStatus, nil
+}
+
+// forceKillSeatunnelXJavaProxyProcesses 在优雅停止超时后强制终止已知的 proxy 进程。
+// forceKillSeatunnelXJavaProxyProcesses forcefully terminates known proxy processes after graceful shutdown times out.
+func forceKillSeatunnelXJavaProxyProcesses(ctx context.Context, status *SeatunnelXJavaProxyServiceStatus) error {
+	if status == nil {
+		return fmt.Errorf("seatunnelx-java-proxy service status is unavailable")
+	}
+
+	pids := make([]int, 0, 4)
+	if status.PID > 0 {
+		pids = append(pids, status.PID)
+	}
+	if status.Port > 0 {
+		pids = append(pids, seatunnelxJavaProxyPIDsByPort(ctx, status.Port)...)
+	}
+	pids = uniquePositivePIDs(pids)
+	if len(pids) == 0 {
+		return fmt.Errorf("no seatunnelx-java-proxy process found to force kill")
+	}
+
+	killed := 0
+	for _, pid := range pids {
+		if !seatunnelxJavaProxyPIDAlive(pid) {
+			continue
+		}
+		// 端口发现的 PID 需要再次校验命令行，避免误杀同端口上的非 proxy 进程。
+		// PIDs discovered from the port are validated by cmdline to avoid killing an unrelated listener.
+		if pid != status.PID && !seatunnelxJavaProxyPIDMatches(pid) {
+			logger.WarnF(ctx, "[seatunnelx-java-proxy] skip force killing non-proxy listener: pid=%d, port=%d", pid, status.Port)
+			continue
+		}
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH) {
+			return fmt.Errorf("force kill seatunnelx-java-proxy pid %d: %w", pid, err)
+		}
+		killed++
+		logger.WarnF(ctx, "[seatunnelx-java-proxy] sent SIGKILL to managed process: pid=%d", pid)
+	}
+	if killed == 0 {
+		return fmt.Errorf("no live seatunnelx-java-proxy process was force killed")
+	}
+
+	if waitErr := waitForSeatunnelXJavaProxyShutdown(ctx, status.Endpoint, status.PID, 3*time.Second); waitErr != nil {
+		return waitErr
+	}
+	return nil
 }
 
 func waitForSeatunnelXJavaProxyShutdown(ctx context.Context, endpoint string, pid int, timeout time.Duration) error {
@@ -253,6 +301,11 @@ func seatunnelxJavaProxyPIDAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
+	if runtime.GOOS == "linux" {
+		if state, ok := linuxProcessState(pid); ok && (state == "Z" || state == "X") {
+			return false
+		}
+	}
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false
@@ -261,6 +314,34 @@ func seatunnelxJavaProxyPIDAlive(pid int) bool {
 		return false
 	}
 	return true
+}
+
+// linuxProcessState 读取 /proc/<pid>/stat 并返回 Linux 单字符进程状态。
+// linuxProcessState reads /proc/<pid>/stat and returns the one-letter Linux process state.
+func linuxProcessState(pid int) (string, bool) {
+	statPath := filepath.Join("/proc", strconv.Itoa(pid), "stat")
+	content, err := os.ReadFile(statPath)
+	if err != nil {
+		return "", false
+	}
+	fields := strings.Fields(string(content))
+	if len(fields) < 3 {
+		return "", false
+	}
+	return fields[2], true
+}
+
+// seatunnelxJavaProxyPIDMatches 检查进程命令行是否属于 seatunnelx-java-proxy。
+// seatunnelxJavaProxyPIDMatches checks whether a process command line belongs to seatunnelx-java-proxy.
+func seatunnelxJavaProxyPIDMatches(pid int) bool {
+	cmdlinePath := filepath.Join("/proc", strconv.Itoa(pid), "cmdline")
+	content, err := os.ReadFile(cmdlinePath)
+	if err != nil {
+		return false
+	}
+	cmdline := strings.ReplaceAll(string(content), "\x00", " ")
+	return strings.Contains(cmdline, "SeatunnelXJavaProxyApplication") ||
+		strings.Contains(cmdline, "seatunnelx-java-proxy")
 }
 
 func seatunnelxJavaProxyPortFromEndpoint(endpoint string) int {
@@ -276,27 +357,58 @@ func seatunnelxJavaProxyPortFromEndpoint(endpoint string) int {
 }
 
 func seatunnelxJavaProxyPIDByPort(ctx context.Context, port int) int {
-	if port <= 0 {
+	pids := seatunnelxJavaProxyPIDsByPort(ctx, port)
+	if len(pids) == 0 {
 		return 0
+	}
+	return pids[0]
+}
+
+// seatunnelxJavaProxyPIDsByPort 返回指定 proxy 端口上的监听进程 PID。
+// seatunnelxJavaProxyPIDsByPort returns listener PIDs on the given proxy port.
+func seatunnelxJavaProxyPIDsByPort(ctx context.Context, port int) []int {
+	if port <= 0 {
+		return nil
 	}
 	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	commands := []string{
-		fmt.Sprintf("lsof -ti tcp:%d -sTCP:LISTEN | head -n1", port),
-		fmt.Sprintf(`ss -ltnp '( sport = :%d )' | sed -n '2p' | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p'`, port),
+		fmt.Sprintf("lsof -ti tcp:%d -sTCP:LISTEN", port),
+		fmt.Sprintf(`ss -ltnp '( sport = :%d )' | sed -n '2,$p' | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p'`, port),
 	}
+	var pids []int
 	for _, shellCmd := range commands {
 		cmd := exec.CommandContext(lookupCtx, "bash", "-lc", shellCmd)
 		output, err := cmd.Output()
 		if err != nil {
 			continue
 		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(output)))
-		if err == nil && pid > 0 {
-			return pid
+		for _, field := range strings.Fields(strings.TrimSpace(string(output))) {
+			pid, err := strconv.Atoi(field)
+			if err == nil && pid > 0 {
+				pids = append(pids, pid)
+			}
 		}
 	}
-	return 0
+	return uniquePositivePIDs(pids)
+}
+
+// uniquePositivePIDs 按发现顺序去重正数进程 ID。
+// uniquePositivePIDs deduplicates process IDs while preserving discovery order.
+func uniquePositivePIDs(pids []int) []int {
+	seen := make(map[int]struct{}, len(pids))
+	result := make([]int, 0, len(pids))
+	for _, pid := range pids {
+		if pid <= 0 {
+			continue
+		}
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+		result = append(result, pid)
+	}
+	return result
 }
 
 func defaultSeatunnelXJavaProxyVersion(version string) string {

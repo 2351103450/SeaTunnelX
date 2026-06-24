@@ -361,6 +361,9 @@ public class SeatunnelXJavaProxyServer {
             } catch (Exception e) {
                 LOG.error("Unexpected request failure", e);
                 writeJson(exchange, 500, errorBody(e.getMessage()));
+            } catch (Throwable e) {
+                LOG.error("Fatal request failure", e);
+                writeJson(exchange, 500, errorBody(e.getMessage()));
             }
         }
 

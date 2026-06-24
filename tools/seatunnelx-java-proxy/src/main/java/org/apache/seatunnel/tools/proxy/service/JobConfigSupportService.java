@@ -53,12 +53,8 @@ import org.slf4j.LoggerFactory;
 
 import scala.Tuple2;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.net.URLClassLoader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -69,7 +65,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 import static org.apache.seatunnel.api.options.ConnectorCommonOptions.PLUGIN_INPUT;
 import static org.apache.seatunnel.api.options.ConnectorCommonOptions.PLUGIN_NAME;
@@ -468,45 +463,11 @@ public class JobConfigSupportService {
     }
 
     URLClassLoader createSeatunnelHomeClassLoader(ClassLoader parent) {
-        String seatunnelHome = System.getProperty("SEATUNNEL_HOME");
-        if (StringUtils.isBlank(seatunnelHome)) {
-            seatunnelHome = System.getenv("SEATUNNEL_HOME");
-        }
-        if (StringUtils.isBlank(seatunnelHome)) {
-            return null;
-        }
-        Path homePath = Paths.get(seatunnelHome);
-        List<String> pluginJars = new ArrayList<>();
-        collectJarPaths(homePath.resolve("connectors"), pluginJars);
-        collectJarPaths(homePath.resolve("plugins"), pluginJars);
-        if (pluginJars.isEmpty()) {
-            return null;
-        }
         try {
-            return PluginClassLoaderUtils.createClassLoader(pluginJars, parent);
-        } catch (IOException e) {
+            return PluginClassLoaderUtils.createClassLoaderFromSeatunnelHome(parent);
+        } catch (java.io.IOException e) {
             throw new ProxyException(
                     500, "Failed to build SEATUNNEL_HOME plugin classloader: " + e.getMessage(), e);
-        }
-    }
-
-    void collectJarPaths(Path root, List<String> pluginJars) {
-        if (root == null || !Files.exists(root)) {
-            return;
-        }
-        try (Stream<Path> pathStream = Files.walk(root)) {
-            pathStream
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".jar"))
-                    .map(Path::toAbsolutePath)
-                    .map(Path::toString)
-                    .sorted()
-                    .forEach(pluginJars::add);
-        } catch (IOException e) {
-            throw new ProxyException(
-                    500,
-                    "Failed to scan SEATUNNEL_HOME jars from " + root + ": " + e.getMessage(),
-                    e);
         }
     }
 

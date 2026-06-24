@@ -28,18 +28,23 @@ import org.apache.seatunnel.api.table.factory.TableTransformFactory;
 import org.apache.seatunnel.tools.proxy.model.PluginFactoryInfo;
 import org.apache.seatunnel.tools.proxy.model.PluginListResult;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 public class PluginRuntimeService {
 
@@ -48,7 +53,10 @@ public class PluginRuntimeService {
 
     public PluginListResult list(Map<String, Object> request) {
         PluginExecutionContext context = openContext(request);
+        Thread currentThread = Thread.currentThread();
+        ClassLoader originalClassLoader = currentThread.getContextClassLoader();
         try {
+            currentThread.setContextClassLoader(context.getClassLoader());
             String cacheKey = context.getPluginType() + "|" + context.getClasspathFingerprint();
             List<PluginFactoryInfo> plugins = LIST_CACHE.get(cacheKey);
             if (plugins == null) {
@@ -58,6 +66,7 @@ public class PluginRuntimeService {
             return new PluginListResult(
                     true, context.getPluginType(), plugins, context.getWarnings());
         } finally {
+            currentThread.setContextClassLoader(originalClassLoader);
             context.close();
         }
     }
@@ -74,20 +83,13 @@ public class PluginRuntimeService {
         try {
             if (!pluginJars.isEmpty()) {
                 urlClassLoader = PluginClassLoaderUtils.createClassLoader(pluginJars, parent);
-                fingerprint = fingerprint(pluginJars);
+                fingerprint = PluginClassLoaderUtils.fingerprint(pluginJars);
                 origin = "request_plugin_jars";
             } else {
                 urlClassLoader = PluginClassLoaderUtils.createClassLoaderFromSeatunnelHome(parent);
                 if (urlClassLoader != null) {
-                    String seatunnelHome = System.getProperty("SEATUNNEL_HOME");
-                    if (StringUtils.isBlank(seatunnelHome)) {
-                        seatunnelHome = System.getenv("SEATUNNEL_HOME");
-                    }
-                    if (StringUtils.isNotBlank(seatunnelHome)) {
-                        List<String> seatunnelHomeJars =
-                                PluginClassLoaderUtils.collectJarPaths(Paths.get(seatunnelHome));
-                        fingerprint = fingerprint(seatunnelHomeJars);
-                    }
+                    fingerprint = PluginClassLoaderUtils.classpathFingerprint(urlClassLoader);
+                    pluginJars = PluginClassLoaderUtils.pluginJars(urlClassLoader);
                     origin = "seatunnel_home";
                 }
             }
@@ -126,7 +128,7 @@ public class PluginRuntimeService {
                     throw new ProxyException(
                             400, "Unsupported plugin type: " + context.getPluginType());
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             throw new ProxyException(
                     400,
                     "Plugin factory not found for type="
@@ -143,24 +145,16 @@ public class PluginRuntimeService {
         List<? extends Factory> factories;
         switch (context.getPluginType()) {
             case "source":
-                factories =
-                        FactoryUtil.discoverFactories(
-                                context.getClassLoader(), TableSourceFactory.class);
+                factories = discoverFactories(context, TableSourceFactory.class);
                 break;
             case "sink":
-                factories =
-                        FactoryUtil.discoverFactories(
-                                context.getClassLoader(), TableSinkFactory.class);
+                factories = discoverFactories(context, TableSinkFactory.class);
                 break;
             case "transform":
-                factories =
-                        FactoryUtil.discoverFactories(
-                                context.getClassLoader(), TableTransformFactory.class);
+                factories = discoverFactories(context, TableTransformFactory.class);
                 break;
             case "catalog":
-                factories =
-                        FactoryUtil.discoverFactories(
-                                context.getClassLoader(), CatalogFactory.class);
+                factories = discoverFactories(context, CatalogFactory.class);
                 break;
             default:
                 throw new ProxyException(
@@ -184,13 +178,134 @@ public class PluginRuntimeService {
         return Collections.unmodifiableList(result);
     }
 
+    /**
+     * 发现插件工厂时隔离坏 provider，避免一个缺依赖的 connector 打断整个列表请求。 Discovers plugin factories while isolating
+     * bad providers so one connector with missing dependencies cannot break the whole list request.
+     */
+    private <T extends Factory> List<T> discoverFactories(
+            PluginExecutionContext context, Class<T> factoryClass) {
+        if (context.getPluginJars().isEmpty()) {
+            try {
+                return FactoryUtil.discoverFactories(context.getClassLoader(), factoryClass);
+            } catch (Throwable e) {
+                throw new ProxyException(
+                        500, "Failed to discover plugin factories: " + summarizeThrowable(e), e);
+            }
+        }
+
+        List<T> factories = new ArrayList<>();
+        Set<String> providerClasses = collectProviderClasses(context, factoryClass);
+        for (String providerClass : providerClasses) {
+            try {
+                Class<?> rawClass = Class.forName(providerClass, true, context.getClassLoader());
+                if (!factoryClass.isAssignableFrom(rawClass)) {
+                    context.addWarning(
+                            "Skip plugin provider "
+                                    + providerClass
+                                    + " because it does not implement "
+                                    + factoryClass.getName());
+                    continue;
+                }
+                factories.add(factoryClass.cast(rawClass.getDeclaredConstructor().newInstance()));
+            } catch (Throwable e) {
+                context.addWarning(
+                        "Skip plugin provider "
+                                + providerClass
+                                + " because it failed to load: "
+                                + summarizeThrowable(e));
+            }
+        }
+        return factories;
+    }
+
+    /**
+     * 从 jar 的 META-INF/services 文件收集 provider 类名。 Collects provider class names from jar
+     * META-INF/services files.
+     */
+    private <T extends Factory> Set<String> collectProviderClasses(
+            PluginExecutionContext context, Class<T> factoryClass) {
+        Set<String> providerClasses = new LinkedHashSet<>();
+        String serviceEntryName = "META-INF/services/" + factoryClass.getName();
+        for (String pluginJar : context.getPluginJars()) {
+            try (JarFile jarFile = new JarFile(pluginJar)) {
+                JarEntry serviceEntry = jarFile.getJarEntry(serviceEntryName);
+                if (serviceEntry == null) {
+                    continue;
+                }
+                String content =
+                        new String(
+                                readAllBytes(jarFile.getInputStream(serviceEntry)),
+                                StandardCharsets.UTF_8);
+                for (String line : content.split("\\R")) {
+                    String providerClass = stripServiceComment(line);
+                    if (StringUtils.isNotBlank(providerClass)) {
+                        providerClasses.add(providerClass);
+                    }
+                }
+            } catch (Throwable e) {
+                context.addWarning(
+                        "Skip service file in "
+                                + pluginJar
+                                + " because it failed to read: "
+                                + summarizeThrowable(e));
+            }
+        }
+        return providerClasses;
+    }
+
+    /**
+     * 读取 service 文件内容，避免依赖较新 JDK 的 InputStream.readAllBytes。 Reads service file content without
+     * relying on newer JDK InputStream.readAllBytes.
+     */
+    private byte[] readAllBytes(InputStream inputStream) throws IOException {
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        try (InputStream in = inputStream;
+                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            while ((bytesRead = in.read(buffer)) >= 0) {
+                out.write(buffer, 0, bytesRead);
+            }
+            return out.toByteArray();
+        }
+    }
+
+    /**
+     * 去掉 ServiceLoader 配置行中的注释和空白。 Removes comments and whitespace from one ServiceLoader
+     * configuration line.
+     */
+    private String stripServiceComment(String line) {
+        String value = StringUtils.trimToEmpty(line);
+        int commentIndex = value.indexOf('#');
+        if (commentIndex >= 0) {
+            value = value.substring(0, commentIndex);
+        }
+        return StringUtils.trimToEmpty(value);
+    }
+
+    /** 压缩异常链，便于作为 API warning 返回。 Summarizes the throwable chain for API warnings. */
+    private String summarizeThrowable(Throwable throwable) {
+        if (throwable == null) {
+            return "unknown";
+        }
+        List<String> parts = new ArrayList<>();
+        Throwable current = throwable;
+        while (current != null && parts.size() < 4) {
+            String simpleName = current.getClass().getSimpleName();
+            String message = StringUtils.trimToEmpty(current.getMessage());
+            parts.add(StringUtils.isBlank(message) ? simpleName : simpleName + ": " + message);
+            current = current.getCause();
+        }
+        return String.join(" | caused by: ", parts);
+    }
+
     String resolveCodeSourceFingerprint(Factory factory) {
         try {
             URL url = FactoryUtil.getFactoryUrl(factory);
             if (url == null || !"file".equalsIgnoreCase(url.getProtocol())) {
                 return String.valueOf(url);
             }
-            return fingerprint(Collections.singletonList(Paths.get(url.toURI()).toString()));
+            return PluginClassLoaderUtils.fingerprint(
+                    Collections.singletonList(java.nio.file.Paths.get(url.toURI()).toString()));
         } catch (Exception e) {
             return factory.getClass().getName();
         }
@@ -216,28 +331,6 @@ public class PluginRuntimeService {
             default:
                 throw new ProxyException(400, "Unsupported pluginType: " + pluginType);
         }
-    }
-
-    private String fingerprint(List<String> paths) {
-        if (paths == null || paths.isEmpty()) {
-            return "empty";
-        }
-        List<String> parts = new ArrayList<>();
-        for (String raw : paths) {
-            try {
-                Path path = Paths.get(raw).toAbsolutePath();
-                parts.add(
-                        path.toString()
-                                + "#"
-                                + java.nio.file.Files.size(path)
-                                + "#"
-                                + java.nio.file.Files.getLastModifiedTime(path).toMillis());
-            } catch (Exception e) {
-                parts.add(raw);
-            }
-        }
-        Collections.sort(parts);
-        return String.join("|", parts);
     }
 
     static class PluginExecutionContext implements AutoCloseable {
@@ -284,6 +377,12 @@ public class PluginRuntimeService {
 
         List<String> getWarnings() {
             return warnings;
+        }
+
+        void addWarning(String warning) {
+            if (StringUtils.isNotBlank(warning)) {
+                warnings.add(warning);
+            }
         }
 
         @Override
