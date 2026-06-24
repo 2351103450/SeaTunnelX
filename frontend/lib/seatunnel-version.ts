@@ -27,6 +27,7 @@ import type {
 
 export const DEFAULT_SEATUNNEL_INSTALL_DIR_TEMPLATE =
   '/opt/seatunnel-{version}';
+export const DEFAULT_SEATUNNEL_DOC_VERSION = '2.3.13';
 
 export function resolveSeatunnelVersion(
   metadata?: Pick<AvailableVersions, 'recommended_version' | 'versions'> | null,
@@ -38,6 +39,15 @@ export function buildSeatunnelInstallDir(version?: string): string {
   return version
     ? `/opt/seatunnel-${version}`
     : DEFAULT_SEATUNNEL_INSTALL_DIR_TEMPLATE;
+}
+
+export function buildSeatunnelConnectorDocsUrl(
+  version?: string,
+  locale?: string,
+): string {
+  const normalizedVersion = version?.trim() || DEFAULT_SEATUNNEL_DOC_VERSION;
+  const localePrefix = locale === 'zh' ? '/zh-CN' : '';
+  return `https://seatunnel.apache.org${localePrefix}/docs/${normalizedVersion}/connectors/`;
 }
 
 export function compareSeatunnelVersions(v1?: string, v2?: string): number {

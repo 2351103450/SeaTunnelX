@@ -1356,6 +1356,12 @@ func (s *Service) InstallPluginToCluster(ctx context.Context, clusterID uint, re
 		s.setInstallProgress(clusterID, req.PluginName, progress)
 		return nil, err
 	}
+	if err := s.recordAttachedConnectorPlugins(ctx, clusterID, req.Version, artifactID, effectiveDeps); err != nil {
+		progress.Status = "failed"
+		progress.Error = err.Error()
+		s.setInstallProgress(clusterID, req.PluginName, progress)
+		return nil, err
+	}
 
 	// Mark as completed / 标记为完成
 	progress.Status = "completed"
@@ -1370,6 +1376,50 @@ func (s *Service) InstallPluginToCluster(ctx context.Context, clusterID uint, re
 	}()
 
 	return installed, nil
+}
+
+// recordAttachedConnectorPlugins records companion connector dependencies as installed plugins.
+// recordAttachedConnectorPlugins 将伴生 connector 依赖按普通已安装插件写入数据库。
+func (s *Service) recordAttachedConnectorPlugins(ctx context.Context, clusterID uint, version, primaryArtifactID string, deps []PluginDependency) error {
+	now := time.Now()
+	for _, dep := range deps {
+		if strings.TrimSpace(dep.TargetDir) != "connectors" {
+			continue
+		}
+		artifactID := strings.TrimSpace(dep.ArtifactID)
+		if artifactID == "" || artifactID == strings.TrimSpace(primaryArtifactID) {
+			continue
+		}
+		pluginName := strings.TrimPrefix(artifactID, "connector-")
+		if strings.TrimSpace(pluginName) == "" {
+			continue
+		}
+		exists, err := s.repo.ExistsByClusterAndName(ctx, clusterID, pluginName)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		depVersion := strings.TrimSpace(dep.Version)
+		if depVersion == "" {
+			depVersion = version
+		}
+		if err := s.repo.Create(ctx, &InstalledPlugin{
+			ClusterID:   clusterID,
+			PluginName:  pluginName,
+			ArtifactID:  artifactID,
+			Category:    PluginCategoryConnector,
+			Version:     depVersion,
+			Status:      PluginStatusInstalled,
+			InstallPath: fmt.Sprintf("connectors/%s-%s.jar", artifactID, depVersion),
+			InstalledAt: now,
+			UpdatedAt:   now,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UninstallPluginFromCluster uninstalls a plugin from all nodes in a cluster.

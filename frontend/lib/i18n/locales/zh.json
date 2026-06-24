@@ -31,7 +31,8 @@
     "optional": "可选",
     "selectAll": "全选",
     "deselectAll": "取消全选",
-    "retry": "重试"
+    "retry": "重试",
+    "processing": "处理中..."
   },
   "dashboard": {
     "title": "控制台",
@@ -1137,6 +1138,12 @@
     "deleteFailed": "插件删除失败",
     "deleteConfirmTitle": "确认删除插件",
     "deleteConfirmDesc": "确定要删除本地插件 {name} 吗？删除后需要重新下载才能安装到集群。",
+    "deleteWithUninstallSuccess": "已卸载 {count} 个集群并删除本地插件",
+    "deleteInstalledClustersTitle": "该插件已安装到以下集群",
+    "deleteInstalledClustersDesc": "如需同时从集群节点卸载插件，请勾选对应集群；不勾选则仅删除 Control Plane 本地插件文件。",
+    "deleteSelectAllClusters": "勾选全部集群",
+    "deleteLocalOnly": "仅删除本地插件",
+    "deleteAndUninstallSelected": "卸载 {count} 个集群并删除",
     "installToCluster": "安装到集群",
     "batchSelectedCount": "已选 {count} 个",
     "batchInstall": "批量安装",

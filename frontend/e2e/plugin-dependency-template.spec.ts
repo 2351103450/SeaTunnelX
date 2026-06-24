@@ -127,4 +127,41 @@ test.describe('plugin dependency template', () => {
       page.getByText(/暂无依赖配置|No dependencies configured/i),
     ).toBeVisible();
   });
+
+  test('offers cluster uninstall choices when deleting an installed local plugin', async ({
+    page,
+  }) => {
+    await page.goto('/plugins');
+    await expect(page.getByTestId('plugin-tab-local')).toBeVisible();
+
+    await page.getByTestId('plugin-tab-local').click();
+    await expect(
+      page.getByTestId(
+        `plugin-local-row-${pluginDependencyTemplate.pluginName}-${pluginDependencyTemplate.seatunnelVersion}`,
+      ),
+    ).toContainText('template-cluster');
+
+    await page
+      .getByTestId(
+        `plugin-local-delete-${pluginDependencyTemplate.pluginName}-${pluginDependencyTemplate.seatunnelVersion}`,
+      )
+      .click();
+    await expect(
+      page.getByText(
+        /该插件已安装到以下集群|This plugin is installed on these clusters/i,
+      ),
+    ).toBeVisible();
+    await page.getByTestId('plugin-delete-uninstall-cluster-101').click();
+    await page
+      .getByRole('button', {
+        name: /卸载 1 个集群并删除|Uninstall 1 clusters and delete/i,
+      })
+      .click();
+
+    await expect(
+      page.getByTestId(
+        `plugin-local-row-${pluginDependencyTemplate.pluginName}-${pluginDependencyTemplate.seatunnelVersion}`,
+      ),
+    ).toHaveCount(0);
+  });
 });

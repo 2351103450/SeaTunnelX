@@ -702,6 +702,34 @@ func buildNodeForCreate(clusterID uint, hostID uint, cluster *Cluster, requested
 		return nil, err
 	}
 
+	if ports := cluster.Config.GetPortConfig(); ports != nil {
+		// 集群级端口配置作为节点未显式传端口时的默认值，确保一键安装配置和 DB 展示一致。
+		// Cluster-level port config is used when node ports are omitted, keeping one-click install config and DB display aligned.
+		switch role {
+		case NodeRoleMaster:
+			if hazelcastPort == 0 {
+				hazelcastPort = ports.MasterHazelcastPort
+			}
+			if apiPort == 0 {
+				apiPort = ports.MasterAPIPort
+			}
+		case NodeRoleWorker:
+			if hazelcastPort == 0 {
+				hazelcastPort = ports.WorkerPort
+			}
+		case NodeRoleMasterWorker:
+			if hazelcastPort == 0 {
+				hazelcastPort = ports.MasterHazelcastPort
+			}
+			if apiPort == 0 {
+				apiPort = ports.MasterAPIPort
+			}
+			if workerPort == 0 {
+				workerPort = ports.WorkerPort
+			}
+		}
+	}
+
 	resolvedHazelcastPort, resolvedAPIPort, resolvedWorkerPort, err := resolveNodePorts(role, cluster.DeploymentMode, hazelcastPort, apiPort, workerPort)
 	if err != nil {
 		return nil, err
@@ -757,6 +785,80 @@ func parseIntValue(value interface{}) (int, bool) {
 		return i, true
 	default:
 		return 0, false
+	}
+}
+
+// ClusterPortConfig 表示 cluster config 中的集群级端口默认值。
+// ClusterPortConfig represents cluster-level port defaults from cluster config.
+type ClusterPortConfig struct {
+	MasterHazelcastPort int `json:"master_hazelcast_port,omitempty"`
+	MasterAPIPort       int `json:"master_api_port,omitempty"`
+	WorkerPort          int `json:"worker_port,omitempty"`
+}
+
+// HasValues 返回端口配置是否包含任意显式值。
+// HasValues returns whether the port config contains any explicit value.
+func (c *ClusterPortConfig) HasValues() bool {
+	return c != nil && (c.MasterHazelcastPort > 0 || c.MasterAPIPort > 0 || c.WorkerPort > 0)
+}
+
+// GetPortConfig 返回 cluster config 中的端口默认值。
+// GetPortConfig returns cluster-level port defaults from cluster config.
+func (c ClusterConfig) GetPortConfig() *ClusterPortConfig {
+	if len(c) == 0 {
+		return nil
+	}
+
+	raw, ok := c["ports"]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	parseMap := func(values map[string]interface{}) *ClusterPortConfig {
+		cfg := &ClusterPortConfig{}
+		if value, ok := parseIntValue(values["master_hazelcast_port"]); ok {
+			cfg.MasterHazelcastPort = value
+		}
+		if value, ok := parseIntValue(values["master_api_port"]); ok {
+			cfg.MasterAPIPort = value
+		}
+		if value, ok := parseIntValue(values["worker_port"]); ok {
+			cfg.WorkerPort = value
+		}
+		if !cfg.HasValues() {
+			return nil
+		}
+		return cfg
+	}
+
+	switch typed := raw.(type) {
+	case ClusterPortConfig:
+		cfg := typed
+		if !cfg.HasValues() {
+			return nil
+		}
+		return &cfg
+	case *ClusterPortConfig:
+		if !typed.HasValues() {
+			return nil
+		}
+		cfg := *typed
+		return &cfg
+	case map[string]interface{}:
+		return parseMap(typed)
+	default:
+		payload, err := json.Marshal(raw)
+		if err != nil {
+			return nil
+		}
+		var cfg ClusterPortConfig
+		if err := json.Unmarshal(payload, &cfg); err != nil {
+			return nil
+		}
+		if !cfg.HasValues() {
+			return nil
+		}
+		return &cfg
 	}
 }
 

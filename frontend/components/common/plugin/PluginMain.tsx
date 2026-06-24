@@ -98,7 +98,6 @@ import {
 } from '@/components/ui/table';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -176,6 +175,10 @@ export function PluginMain() {
   const [pluginToDelete, setPluginToDelete] = useState<LocalPlugin | null>(
     null,
   );
+  const [deleteUninstallClusterIds, setDeleteUninstallClusterIds] = useState<
+    Set<number>
+  >(new Set());
+  const [isDeletingLocalPlugin, setIsDeletingLocalPlugin] = useState(false);
 
   // Local plugins pagination state / 本地插件分页状态
   const [localPluginsPage, setLocalPluginsPage] = useState(1);
@@ -637,34 +640,146 @@ export function PluginMain() {
   };
 
   /**
-   * Handle delete local plugin
-   * 处理删除本地插件
+   * 获取本地插件已安装到的集群列表
+   * Get clusters where a local plugin is installed
+   */
+  const getInstalledClustersForLocalPlugin = useCallback(
+    (plugin: LocalPlugin) => {
+      const clusterStatusMap = pluginClusterStatus.get(
+        pluginClusterInstallKey(plugin.name, plugin.version),
+      );
+
+      if (!clusterStatusMap) {
+        return [];
+      }
+
+      return clusters.filter((cluster) => clusterStatusMap.has(cluster.id));
+    },
+    [clusters, pluginClusterStatus],
+  );
+
+  const deleteDialogInstalledClusters = useMemo(
+    () =>
+      pluginToDelete ? getInstalledClustersForLocalPlugin(pluginToDelete) : [],
+    [getInstalledClustersForLocalPlugin, pluginToDelete],
+  );
+
+  /**
+   * 打开本地插件删除确认对话框
+   * Open local plugin deletion dialog
+   */
+  const openDeleteLocalPluginDialog = useCallback((plugin: LocalPlugin) => {
+    setPluginToDelete(plugin);
+    // 删除本地文件默认不卸载集群插件，避免误删运行环境资产。
+    // Local deletion does not uninstall cluster plugins by default to avoid accidental runtime asset removal.
+    setDeleteUninstallClusterIds(new Set());
+    setDeleteDialogOpen(true);
+  }, []);
+
+  /**
+   * 处理删除对话框开关状态变化
+   * Handle delete dialog open state changes
+   */
+  const handleDeleteDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (isDeletingLocalPlugin && !open) {
+        return;
+      }
+      setDeleteDialogOpen(open);
+      if (!open) {
+        setPluginToDelete(null);
+        setDeleteUninstallClusterIds(new Set());
+      }
+    },
+    [isDeletingLocalPlugin],
+  );
+
+  /**
+   * 切换删除前是否从某个集群卸载插件
+   * Toggle whether to uninstall the plugin from one cluster before deletion
+   */
+  const handleToggleDeleteUninstallCluster = useCallback(
+    (clusterId: number, checked: boolean) => {
+      setDeleteUninstallClusterIds((prev) => {
+        const next = new Set(prev);
+        if (checked) {
+          next.add(clusterId);
+        } else {
+          next.delete(clusterId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  /**
+   * 切换删除对话框中的全部已安装集群
+   * Toggle all installed clusters in the deletion dialog
+   */
+  const handleToggleAllDeleteUninstallClusters = useCallback(
+    (checked: boolean) => {
+      if (!checked) {
+        setDeleteUninstallClusterIds(new Set());
+        return;
+      }
+
+      setDeleteUninstallClusterIds(
+        new Set(deleteDialogInstalledClusters.map((cluster) => cluster.id)),
+      );
+    },
+    [deleteDialogInstalledClusters],
+  );
+
+  /**
+   * 处理删除本地插件以及可选的集群卸载
+   * Handle delete local plugin and optional cluster uninstalls
    */
   const handleDeleteLocalPlugin = async () => {
     if (!pluginToDelete) {
       return;
     }
 
+    setIsDeletingLocalPlugin(true);
     try {
+      const selectedClusterIds = Array.from(deleteUninstallClusterIds);
+      if (selectedClusterIds.length > 0) {
+        // 先卸载集群插件，成功后再删除本地文件，避免本地文件已删但集群卸载失败。
+        // Uninstall from clusters first, then delete local files to avoid losing local files when cluster uninstall fails.
+        await Promise.all(
+          selectedClusterIds.map((clusterId) =>
+            PluginService.uninstallPlugin(clusterId, pluginToDelete.name),
+          ),
+        );
+      }
+
       await PluginService.deleteLocalPlugin(
         pluginToDelete.name,
         pluginToDelete.version,
       );
-      toast.success(t('plugin.deleteSuccess'));
-      loadLocalPlugins();
+      toast.success(
+        selectedClusterIds.length > 0
+          ? t('plugin.deleteWithUninstallSuccess', {
+              count: selectedClusterIds.length,
+            })
+          : t('plugin.deleteSuccess'),
+      );
+      await loadLocalPlugins();
       // Also remove from downloadedPlugins set / 同时从已下载集合中移除
       setDownloadedPlugins((prev) => {
         const next = new Set(prev);
         next.delete(pluginDownloadKey(pluginToDelete.name, pluginToDelete.version));
         return next;
       });
+      setDeleteDialogOpen(false);
+      setPluginToDelete(null);
+      setDeleteUninstallClusterIds(new Set());
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : t('plugin.deleteFailed');
       toast.error(errorMsg);
     } finally {
-      setDeleteDialogOpen(false);
-      setPluginToDelete(null);
+      setIsDeletingLocalPlugin(false);
     }
   };
 
@@ -1343,12 +1458,8 @@ export function PluginMain() {
                       {/* Filtered local plugins / 过滤后的本地插件 */}
                       {getPaginatedLocalPlugins().map((plugin) => {
                         // Get cluster installation status for this plugin / 获取此插件的集群安装状态
-                        const clusterStatusMap = pluginClusterStatus.get(
-                          pluginClusterInstallKey(plugin.name, plugin.version),
-                        );
-                        const installedClusters = clusterStatusMap
-                          ? clusters.filter((c) => clusterStatusMap.has(c.id))
-                          : [];
+                        const installedClusters =
+                          getInstalledClustersForLocalPlugin(plugin);
 
                         return (
                           <TableRow
@@ -1433,10 +1544,7 @@ export function PluginMain() {
                                 size='sm'
                                 data-testid={`plugin-local-delete-${plugin.name}-${plugin.version}`}
                                 className='text-destructive hover:text-destructive'
-                                onClick={() => {
-                                  setPluginToDelete(plugin);
-                                  setDeleteDialogOpen(true);
-                                }}
+                                onClick={() => openDeleteLocalPluginDialog(plugin)}
                               >
                                 <Trash2 className='h-4 w-4' />
                               </Button>
@@ -1672,7 +1780,10 @@ export function PluginMain() {
       </Dialog>
 
       {/* Delete Confirmation Dialog / 删除确认对话框 */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialog
+        open={deleteDialogOpen}
+        onOpenChange={handleDeleteDialogOpenChange}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -1684,14 +1795,79 @@ export function PluginMain() {
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {deleteDialogInstalledClusters.length > 0 && (
+            <div className='space-y-3 rounded-md border p-3'>
+              <div className='space-y-1'>
+                <div className='text-sm font-medium'>
+                  {t('plugin.deleteInstalledClustersTitle')}
+                </div>
+                <p className='text-xs text-muted-foreground'>
+                  {t('plugin.deleteInstalledClustersDesc')}
+                </p>
+              </div>
+              <label className='flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm'>
+                <Checkbox
+                  checked={
+                    deleteUninstallClusterIds.size ===
+                    deleteDialogInstalledClusters.length
+                  }
+                  disabled={isDeletingLocalPlugin}
+                  onCheckedChange={(checked) =>
+                    handleToggleAllDeleteUninstallClusters(checked === true)
+                  }
+                />
+                <span>{t('plugin.deleteSelectAllClusters')}</span>
+              </label>
+              <div className='max-h-48 space-y-2 overflow-y-auto pr-1'>
+                {deleteDialogInstalledClusters.map((cluster) => (
+                  <label
+                    key={cluster.id}
+                    className='flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm'
+                    data-testid={`plugin-delete-uninstall-cluster-${cluster.id}`}
+                  >
+                    <span className='min-w-0'>
+                      <span className='block truncate font-medium'>
+                        {cluster.name}
+                      </span>
+                      <span className='block text-xs text-muted-foreground'>
+                        v{cluster.version}
+                      </span>
+                    </span>
+                    <Checkbox
+                      checked={deleteUninstallClusterIds.has(cluster.id)}
+                      disabled={isDeletingLocalPlugin}
+                      onCheckedChange={(checked) =>
+                        handleToggleDeleteUninstallCluster(
+                          cluster.id,
+                          checked === true,
+                        )
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
+            <AlertDialogCancel disabled={isDeletingLocalPlugin}>
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <Button
+              type='button'
               onClick={handleDeleteLocalPlugin}
+              disabled={isDeletingLocalPlugin}
               className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
             >
-              {t('common.delete')}
-            </AlertDialogAction>
+              {isDeletingLocalPlugin
+                ? t('common.processing')
+                : deleteUninstallClusterIds.size > 0
+                  ? t('plugin.deleteAndUninstallSelected', {
+                      count: deleteUninstallClusterIds.size,
+                    })
+                  : t('plugin.deleteLocalOnly')}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

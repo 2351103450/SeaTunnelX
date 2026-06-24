@@ -31,7 +31,8 @@
     "optional": "optional",
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
-    "retry": "Retry"
+    "retry": "Retry",
+    "processing": "Processing..."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1137,6 +1138,12 @@
     "deleteFailed": "Failed to delete plugin",
     "deleteConfirmTitle": "Confirm Delete Plugin",
     "deleteConfirmDesc": "Are you sure you want to delete local plugin {name}? You will need to download it again to install to clusters.",
+    "deleteWithUninstallSuccess": "Uninstalled from {count} clusters and deleted the local plugin",
+    "deleteInstalledClustersTitle": "This plugin is installed on these clusters",
+    "deleteInstalledClustersDesc": "Select clusters if you also want to uninstall the plugin from cluster nodes. Leave all unchecked to delete only the Control Plane local plugin file.",
+    "deleteSelectAllClusters": "Select all clusters",
+    "deleteLocalOnly": "Delete local only",
+    "deleteAndUninstallSelected": "Uninstall {count} clusters and delete",
     "installToCluster": "Install to Cluster",
     "batchSelectedCount": "{count} selected",
     "batchInstall": "Batch Install",

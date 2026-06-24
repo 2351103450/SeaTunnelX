@@ -58,6 +58,8 @@ import type {
   PluginDependency,
   PluginDependencyDisable,
 } from '@/lib/services/plugin';
+import {useLocale} from '@/lib/i18n';
+import {buildSeatunnelConnectorDocsUrl} from '@/lib/seatunnel-version';
 import {PluginService} from '@/lib/services/plugin';
 import {PluginDependencyConfigSection} from './DependencyConfigDialog';
 
@@ -145,6 +147,7 @@ export function PluginDetailDialog({
   onDownload,
 }: PluginDetailDialogProps) {
   const t = useTranslations();
+  const {locale} = useLocale();
   const [officialDeps, setOfficialDeps] =
     useState<OfficialDependenciesResponse | null>(null);
   const [loadingOfficialDeps, setLoadingOfficialDeps] = useState(false);
@@ -183,6 +186,7 @@ export function PluginDetailDialog({
   );
   const hasMultiProfiles = availableProfiles.length > 1;
   const effectiveVersion = seatunnelVersion || plugin.version;
+  const docsUrl = buildSeatunnelConnectorDocsUrl(effectiveVersion, locale);
   const useIsolatedDeps = supportsIsolatedDependency(effectiveVersion);
   const disabledDependencies = useMemo(
     () => officialDeps?.disabled_dependencies || [],
@@ -330,18 +334,16 @@ export function PluginDetailDialog({
                 {plugin.description || t('plugin.noDescription')}
               </p>
 
-              {plugin.doc_url && (
-                <Button variant='outline' size='sm' asChild>
-                  <a
-                    href={plugin.doc_url}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                  >
-                    <ExternalLink className='h-4 w-4 mr-2' />
-                    {t('plugin.viewDocumentation')}
-                  </a>
-                </Button>
-              )}
+              <Button variant='outline' size='sm' asChild>
+                <a
+                  href={docsUrl}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                >
+                  <ExternalLink className='h-4 w-4 mr-2' />
+                  {t('plugin.viewDocumentation')}
+                </a>
+              </Button>
             </div>
 
             <Separator />

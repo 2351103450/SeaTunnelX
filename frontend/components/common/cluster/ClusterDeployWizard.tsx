@@ -897,7 +897,10 @@ export function ClusterDeployWizard({
             config.deploymentMode === DeploymentMode.SEPARATED
               ? config.workerPort
               : config.clusterPort,
-          api_port: role === 'master' ? config.httpPort : undefined,
+          api_port:
+            role === NodeRole.MASTER || role === NodeRole.MASTER_WORKER
+              ? config.httpPort
+              : undefined,
         });
         updateStep(
           'add_node',

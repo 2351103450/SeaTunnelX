@@ -86,8 +86,6 @@ export function PluginGrid({
   // Handle page change / 处理页码变化
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    // Scroll to top of grid / 滚动到网格顶部
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Handle page size change / 处理每页数量变化

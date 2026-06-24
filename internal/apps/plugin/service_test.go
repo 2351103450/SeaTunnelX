@@ -377,6 +377,71 @@ func TestListInstalledPluginsReconcilesClusterVersion(t *testing.T) {
 	}
 }
 
+func TestInstallPluginToClusterRecordsAttachedConnectorDependencies(t *testing.T) {
+	tempDir := t.TempDir()
+	service, repo := newTestPluginServiceWithDownloader(t, tempDir)
+	ctx := context.Background()
+	version := "2.3.13"
+
+	service.SetPluginFetcher(func(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, MirrorSource, error) {
+		return []Plugin{{
+			Name:        "cdc-mysql",
+			DisplayName: "Cdc Mysql",
+			Category:    PluginCategoryConnector,
+			Version:     version,
+			Description: "Cdc Mysql connector",
+			GroupID:     "org.apache.seatunnel",
+			ArtifactID:  "connector-cdc-mysql",
+		}}, MirrorSourceApache, nil
+	})
+
+	writeTestFile := func(path string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("failed to create dir for %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("jar"), 0o644); err != nil {
+			t.Fatalf("failed to write %s: %v", path, err)
+		}
+	}
+	writeTestFile(service.downloader.GetConnectorPath("connector-cdc-mysql", version))
+	writeTestFile(service.downloader.GetDependencyPath("connector-jdbc", version, version, "connectors"))
+	writeTestFile(service.downloader.GetDependencyPath("mysql-connector-java", "8.0.28", version, "plugins/connector-cdc-mysql"))
+
+	installed, err := service.InstallPluginToCluster(ctx, 1, &InstallPluginRequest{
+		PluginName: "cdc-mysql",
+		Version:    version,
+	})
+	if err != nil {
+		t.Fatalf("InstallPluginToCluster returned error: %v", err)
+	}
+	if installed.PluginName != "cdc-mysql" {
+		t.Fatalf("expected primary plugin cdc-mysql, got %s", installed.PluginName)
+	}
+
+	plugins, err := repo.ListByCluster(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListByCluster returned error: %v", err)
+	}
+	byName := make(map[string]InstalledPlugin, len(plugins))
+	for _, item := range plugins {
+		byName[item.PluginName] = item
+	}
+	if _, ok := byName["cdc-mysql"]; !ok {
+		t.Fatalf("expected primary plugin record, got %+v", plugins)
+	}
+	jdbc, ok := byName["jdbc"]
+	if !ok {
+		t.Fatalf("expected attached jdbc connector record, got %+v", plugins)
+	}
+	if jdbc.ArtifactID != "connector-jdbc" || jdbc.InstallPath != "connectors/connector-jdbc-2.3.13.jar" {
+		t.Fatalf("unexpected jdbc record: %+v", jdbc)
+	}
+	if _, ok := byName["mysql-connector-java"]; ok {
+		t.Fatalf("expected non-connector dependency to stay out of installed plugins, got %+v", plugins)
+	}
+}
+
 func TestListAvailablePluginsFetchesRemoteAndPersistsCatalog(t *testing.T) {
 	service, repo := newTestPluginService(t)
 	ctx := context.Background()

@@ -33,6 +33,8 @@ import {
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Database, ExternalLink, Download, CheckCircle} from 'lucide-react';
+import {useLocale} from '@/lib/i18n';
+import {buildSeatunnelConnectorDocsUrl} from '@/lib/seatunnel-version';
 import type {Plugin, PluginCategory} from '@/lib/services/plugin';
 import {getPluginDependencyStatusMeta} from './dependency-status';
 
@@ -90,6 +92,8 @@ export function PluginCard({
   onDownload,
 }: PluginCardProps) {
   const t = useTranslations();
+  const {locale} = useLocale();
+  const docsUrl = buildSeatunnelConnectorDocsUrl(plugin.version, locale);
   const dependencyMeta = getPluginDependencyStatusMeta(plugin, t);
 
   /**
@@ -133,17 +137,15 @@ export function PluginCard({
               </CardDescription>
             </div>
           </div>
-          {plugin.doc_url && (
-            <a
-              href={plugin.doc_url}
-              target='_blank'
-              rel='noopener noreferrer'
-              onClick={(e) => e.stopPropagation()}
-              className='text-muted-foreground hover:text-primary'
-            >
-              <ExternalLink className='h-4 w-4' />
-            </a>
-          )}
+          <a
+            href={docsUrl}
+            target='_blank'
+            rel='noopener noreferrer'
+            onClick={(e) => e.stopPropagation()}
+            className='text-muted-foreground hover:text-primary'
+          >
+            <ExternalLink className='h-4 w-4' />
+          </a>
         </div>
       </CardHeader>
       <CardContent className='pt-0'>

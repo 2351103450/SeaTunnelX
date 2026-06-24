@@ -118,6 +118,8 @@ const pluginFixture = {
 };
 
 type PluginDependencyFixtureState = {
+  localPluginDeleted: boolean;
+  installedPluginNames: Set<string>;
   disabledDependencies: Array<{
     id: number;
     plugin_name: string;
@@ -136,6 +138,8 @@ type PluginDependencyFixtureState = {
 
 function createInitialState(): PluginDependencyFixtureState {
   return {
+    localPluginDeleted: false,
+    installedPluginNames: new Set([pluginName]),
     disabledDependencies: [],
     customDependencies: [],
     nextDisableId: 300,
@@ -230,6 +234,81 @@ function buildOfficialDependenciesResponse(
   };
 }
 
+/**
+ * 构造本地插件列表夹具响应
+ * Build local plugin list fixture response
+ */
+function buildLocalPluginResponse(state: PluginDependencyFixtureState) {
+  if (state.localPluginDeleted) {
+    return [];
+  }
+
+  return [
+    {
+      name: pluginName,
+      artifact_id: 'connector-jdbc',
+      version: seatunnelVersion,
+      category: 'connector',
+      connector_path: '/tmp/seatunnelx/plugins/connector-jdbc-2.3.13.jar',
+      size: 1024,
+      downloaded_at: now,
+      selected_profile_keys: ['mysql'],
+      attached_connectors: [],
+      dependencies: [mysqlDriverItem],
+    },
+  ];
+}
+
+/**
+ * 构造集群列表夹具响应项
+ * Build cluster list fixture response item
+ */
+function buildClusterResponse() {
+  return {
+    id: 101,
+    name: 'template-cluster',
+    description: 'Template cluster for plugin delete flow',
+    deployment_mode: 'hybrid',
+    version: seatunnelVersion,
+    status: 'running',
+    install_dir: '/tmp/seatunnel',
+    config: {},
+    node_count: 1,
+    online_nodes: 1,
+    health_status: 'healthy',
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+/**
+ * 构造已安装插件夹具响应
+ * Build installed plugins fixture response
+ */
+function buildInstalledPluginsResponse(state: PluginDependencyFixtureState) {
+  if (!state.installedPluginNames.has(pluginName)) {
+    return [];
+  }
+
+  return [
+    {
+      id: 501,
+      cluster_id: 101,
+      plugin_name: pluginName,
+      artifact_id: 'connector-jdbc',
+      category: 'connector',
+      version: seatunnelVersion,
+      status: 'installed',
+      install_path: '/tmp/seatunnel/connectors/connector-jdbc-2.3.13.jar',
+      installed_at: now,
+      updated_at: now,
+      selected_profile_keys: ['mysql'],
+      attached_connectors: [],
+      dependencies: [mysqlDriverItem],
+    },
+  ];
+}
+
 export async function installPluginDependencyTemplateRoutes(
   page: Page,
 ): Promise<void> {
@@ -282,7 +361,19 @@ export async function installPluginDependencyTemplateRoutes(
     if (request.method() === 'GET' && pathname === '/api/v1/plugins/local') {
       await route.fulfill({
         status: 200,
-        json: ok([]),
+        json: ok(buildLocalPluginResponse(state)),
+      });
+      return;
+    }
+
+    if (
+      request.method() === 'DELETE' &&
+      pathname === `/api/v1/plugins/${pluginName}/local`
+    ) {
+      state.localPluginDeleted = true;
+      await route.fulfill({
+        status: 200,
+        json: ok(null),
       });
       return;
     }
@@ -294,6 +385,40 @@ export async function installPluginDependencyTemplateRoutes(
       await route.fulfill({
         status: 200,
         json: ok([]),
+      });
+      return;
+    }
+
+    if (request.method() === 'GET' && pathname === '/api/v1/clusters') {
+      await route.fulfill({
+        status: 200,
+        json: ok({
+          total: 1,
+          clusters: [buildClusterResponse()],
+        }),
+      });
+      return;
+    }
+
+    if (
+      request.method() === 'GET' &&
+      pathname === '/api/v1/clusters/101/plugins'
+    ) {
+      await route.fulfill({
+        status: 200,
+        json: ok(buildInstalledPluginsResponse(state)),
+      });
+      return;
+    }
+
+    if (
+      request.method() === 'DELETE' &&
+      pathname === `/api/v1/clusters/101/plugins/${pluginName}`
+    ) {
+      state.installedPluginNames.delete(pluginName);
+      await route.fulfill({
+        status: 200,
+        json: ok(null),
       });
       return;
     }

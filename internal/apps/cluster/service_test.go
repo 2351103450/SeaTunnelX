@@ -174,6 +174,62 @@ func TestUpdateSeatunnelHTTPPort(t *testing.T) {
 	}
 }
 
+func TestBuildNodeForCreateUsesClusterPortConfigDefaults(t *testing.T) {
+	cluster := &Cluster{
+		DeploymentMode: DeploymentModeHybrid,
+		InstallDir:     "/opt/seatunnel",
+		Config: ClusterConfig{
+			"ports": map[string]interface{}{
+				"master_hazelcast_port": 15801,
+				"master_api_port":       18080,
+				"worker_port":           15802,
+			},
+		},
+	}
+
+	node, err := buildNodeForCreate(1, 2, cluster, NodeRoleMasterWorker, "", 0, 0, 0, nil)
+	if err != nil {
+		t.Fatalf("buildNodeForCreate returned error: %v", err)
+	}
+	if node.HazelcastPort != 15801 {
+		t.Fatalf("expected hazelcast port 15801, got %d", node.HazelcastPort)
+	}
+	if node.APIPort != 18080 {
+		t.Fatalf("expected api port 18080 from cluster config, got %d", node.APIPort)
+	}
+	if node.WorkerPort != 15802 {
+		t.Fatalf("expected worker port 15802, got %d", node.WorkerPort)
+	}
+}
+
+func TestBuildNodeForCreateExplicitPortsOverrideClusterPortConfig(t *testing.T) {
+	cluster := &Cluster{
+		DeploymentMode: DeploymentModeHybrid,
+		InstallDir:     "/opt/seatunnel",
+		Config: ClusterConfig{
+			"ports": map[string]interface{}{
+				"master_hazelcast_port": 15801,
+				"master_api_port":       18080,
+				"worker_port":           15802,
+			},
+		},
+	}
+
+	node, err := buildNodeForCreate(1, 2, cluster, NodeRoleMasterWorker, "", 25801, 28080, 25802, nil)
+	if err != nil {
+		t.Fatalf("buildNodeForCreate returned error: %v", err)
+	}
+	if node.HazelcastPort != 25801 {
+		t.Fatalf("expected explicit hazelcast port 25801, got %d", node.HazelcastPort)
+	}
+	if node.APIPort != 28080 {
+		t.Fatalf("expected explicit api port 28080, got %d", node.APIPort)
+	}
+	if node.WorkerPort != 25802 {
+		t.Fatalf("expected explicit worker port 25802, got %d", node.WorkerPort)
+	}
+}
+
 func TestUpdateNodeSyncsSeatunnelHTTPPortAndRestartsNode(t *testing.T) {
 	db, cleanup := setupServiceTestDB(t)
 	defer cleanup()
