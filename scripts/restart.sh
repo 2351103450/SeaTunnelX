@@ -172,6 +172,45 @@ require_cmd() {
   fi
 }
 
+detect_agent_goos() {
+  if [[ -n "${GOOS:-}" ]]; then
+    echo "$GOOS"
+    return 0
+  fi
+  go env GOOS
+}
+
+detect_agent_goarch() {
+  if [[ -n "${GOARCH:-}" ]]; then
+    echo "$GOARCH"
+    return 0
+  fi
+  go env GOARCH
+}
+
+agent_binary_name_for_target() {
+  local goos="$1"
+  local goarch="$2"
+
+  case "$goos" in
+    linux|darwin) ;;
+    *)
+      echo "不支持同步的 Agent 目标系统: $goos（支持: linux, darwin）" >&2
+      return 1
+      ;;
+  esac
+
+  case "$goarch" in
+    amd64|arm64) ;;
+    *)
+      echo "不支持同步的 Agent 目标架构: $goarch（支持: amd64, arm64）" >&2
+      return 1
+      ;;
+  esac
+
+  echo "seatunnelx-agent-${goos}-${goarch}"
+}
+
 is_java_proxy_pid() {
   local pid="$1"
   if [[ -z "$pid" ]]; then
@@ -530,13 +569,19 @@ if $DO_BUILD && $RUN_BACKEND; then
   go build -o seatunnelx .
   echo "      seatunnelx 构建完成."
 
-  step=$((step + 1)); echo "[$step/$total] 构建 seatunnelx-agent ..."
-  (cd agent && go build -o seatunnelx-agent ./cmd)
-  echo "      seatunnelx-agent 构建完成."
+  agent_goos="$(detect_agent_goos)"
+  agent_goarch="$(detect_agent_goarch)"
+  agent_binary_name="$(agent_binary_name_for_target "$agent_goos" "$agent_goarch")"
 
-  if [[ -d lib/agent ]] && [[ -f agent/seatunnelx-agent ]]; then
-    cp -f agent/seatunnelx-agent lib/agent/seatunnelx-agent-linux-amd64
-    echo "      已同步 agent 到 lib/agent."
+  step=$((step + 1)); echo "[$step/$total] 构建 seatunnelx-agent ..."
+  (cd agent && GOOS="$agent_goos" GOARCH="$agent_goarch" go build -o seatunnelx-agent ./cmd)
+  echo "      seatunnelx-agent 构建完成: ${agent_goos}/${agent_goarch}"
+
+  if [[ -f agent/seatunnelx-agent ]]; then
+    mkdir -p lib/agent
+    cp -f agent/seatunnelx-agent "lib/agent/${agent_binary_name}"
+    chmod +x "lib/agent/${agent_binary_name}"
+    echo "      已同步 agent 到 lib/agent/${agent_binary_name}."
   fi
 
   step=$((step + 1)); echo "[$step/$total] 构建 seatunnelx-java-proxy 薄 jar ..."
