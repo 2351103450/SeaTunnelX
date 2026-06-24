@@ -1,3 +1,6 @@
+## 强制遵循
+1. 使用中文进行git提交
+2. 每个方法要有注释，函数内部的关键逻辑也要加注释
 <!-- TRELLIS:START -->
 # Trellis Instructions
 
