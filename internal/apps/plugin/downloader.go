@@ -788,6 +788,7 @@ func (d *Downloader) downloadFile(ctx context.Context, url, targetPath string, p
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+	applyMavenRequestHeaders(req)
 
 	// Execute request / 执行请求
 	resp, err := d.httpClient.Do(req)
@@ -888,6 +889,7 @@ func (d *Downloader) verifyChecksum(ctx context.Context, filePath, sha1URL strin
 	if err != nil {
 		return fmt.Errorf("failed to create checksum request: %w", err)
 	}
+	applyMavenRequestHeaders(req)
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {

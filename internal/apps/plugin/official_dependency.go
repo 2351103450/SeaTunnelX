@@ -896,6 +896,7 @@ func (s *Service) resolveLatestMavenVersion(ctx context.Context, groupID, artifa
 	if err != nil {
 		return "", err
 	}
+	applyMavenRequestHeaders(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

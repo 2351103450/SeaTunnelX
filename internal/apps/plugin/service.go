@@ -140,9 +140,10 @@ type Service struct {
 	hostInfoGetter HostInfoGetter
 
 	// Plugin cache / 插件缓存
-	cachedPlugins    map[string][]Plugin // key: version
-	pluginsCacheTime map[string]time.Time
-	pluginsMu        sync.RWMutex
+	cachedPlugins            map[string][]Plugin // key: version
+	pluginsCacheTime         map[string]time.Time
+	catalogFetchFailureUntil map[string]time.Time
+	pluginsMu                sync.RWMutex
 
 	// Installation progress tracking / 安装进度跟踪
 	installProgress   map[string]*PluginInstallStatus // key: clusterID:pluginName
@@ -157,12 +158,13 @@ type Service struct {
 // NewService 创建一个新的 Service 实例。
 func NewService(repo *Repository) *Service {
 	service := &Service{
-		repo:               repo,
-		downloader:         NewDownloader(config.GetPluginsDir()),
-		cachedPlugins:      make(map[string][]Plugin),
-		pluginsCacheTime:   make(map[string]time.Time),
-		installProgress:    make(map[string]*PluginInstallStatus),
-		seedLoadedVersions: make(map[string]bool),
+		repo:                     repo,
+		downloader:               NewDownloader(config.GetPluginsDir()),
+		cachedPlugins:            make(map[string][]Plugin),
+		pluginsCacheTime:         make(map[string]time.Time),
+		catalogFetchFailureUntil: make(map[string]time.Time),
+		installProgress:          make(map[string]*PluginInstallStatus),
+		seedLoadedVersions:       make(map[string]bool),
 	}
 	service.pluginFetcher = service.fetchPluginsFromDocs
 	service.officialDocFetcher = service.fetchOfficialDocMarkdown
@@ -174,12 +176,13 @@ func NewService(repo *Repository) *Service {
 // NewServiceWithDownloader 创建一个带有自定义下载器的新 Service 实例。
 func NewServiceWithDownloader(repo *Repository, pluginsDir string) *Service {
 	service := &Service{
-		repo:               repo,
-		downloader:         NewDownloader(pluginsDir),
-		cachedPlugins:      make(map[string][]Plugin),
-		pluginsCacheTime:   make(map[string]time.Time),
-		installProgress:    make(map[string]*PluginInstallStatus),
-		seedLoadedVersions: make(map[string]bool),
+		repo:                     repo,
+		downloader:               NewDownloader(pluginsDir),
+		cachedPlugins:            make(map[string][]Plugin),
+		pluginsCacheTime:         make(map[string]time.Time),
+		catalogFetchFailureUntil: make(map[string]time.Time),
+		installProgress:          make(map[string]*PluginInstallStatus),
+		seedLoadedVersions:       make(map[string]bool),
 	}
 	service.pluginFetcher = service.fetchPluginsFromDocs
 	service.officialDocFetcher = service.fetchOfficialDocMarkdown
@@ -218,7 +221,7 @@ func (s *Service) ListAvailablePlugins(ctx context.Context, version string, mirr
 		return nil, ErrInvalidMirror
 	}
 
-	plugins, sourceMirror, refreshedAt, source, cacheHit := s.getPlugins(ctx, version)
+	plugins, sourceMirror, refreshedAt, source, cacheHit := s.getPlugins(ctx, version, mirror)
 	s.ensureBundledSeedLoaded(ctx, version)
 	plugins = s.enrichPluginsWithDependencyState(ctx, version, plugins)
 
@@ -236,26 +239,103 @@ func (s *Service) ListAvailablePlugins(ctx context.Context, version string, mirr
 
 // getPlugins returns the plugin list, preferring persisted DB snapshots and falling back to Maven.
 // getPlugins 返回插件列表，优先使用数据库快照，不存在时回退到 Maven。
-func (s *Service) getPlugins(ctx context.Context, version string) ([]Plugin, MirrorSource, *time.Time, PluginListSource, bool) {
+func (s *Service) getPlugins(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, MirrorSource, *time.Time, PluginListSource, bool) {
 	if persisted, sourceMirror, refreshedAt := s.loadPluginsFromCatalog(ctx, version); len(persisted) > 0 {
 		return persisted, sourceMirror, refreshedAt, PluginListSourceDatabase, false
+	}
+
+	seedPlugins := s.pluginsFromBundledSeed(version)
+	if len(seedPlugins) > 0 && s.shouldSkipRemoteCatalogFetch(version, mirror) {
+		return seedPlugins, mirror, nil, PluginListSourceSeed, true
 	}
 
 	fetcher := s.pluginFetcher
 	if fetcher == nil {
 		fetcher = s.fetchPluginsFromDocs
 	}
-	plugins, usedMirror, err := fetcher(ctx, version, MirrorSourceApache)
+	plugins, usedMirror, err := fetcher(ctx, version, mirror)
 	if err != nil {
-		fmt.Printf("[Plugin] Failed to fetch plugins from Maven: %v\n", err)
-		return []Plugin{}, MirrorSourceApache, nil, PluginListSourceRemote, false
+		logger.WarnF(ctx, "[Plugin] Failed to fetch plugins from Maven: %v", err)
+		if len(seedPlugins) > 0 {
+			s.markRemoteCatalogFetchFailed(version, mirror)
+			logger.WarnF(ctx, "[Plugin] Falling back to bundled connector catalog for version %s", version)
+			return seedPlugins, mirror, nil, PluginListSourceSeed, false
+		}
+		return []Plugin{}, mirror, nil, PluginListSourceRemote, false
 	}
 	plugins = s.filterHiddenPluginsForVersion(version, plugins)
 	refreshedAt := time.Now()
 	if err := s.persistPluginCatalog(ctx, version, plugins, PluginCatalogSourceRemote, usedMirror, refreshedAt); err != nil {
 		logger.WarnF(ctx, "[Plugin] 持久化插件目录失败: %v", err)
 	}
+	s.clearRemoteCatalogFetchFailure(version, mirror)
 	return plugins, usedMirror, &refreshedAt, PluginListSourceRemote, false
+}
+
+func (s *Service) pluginsFromBundledSeed(version string) []Plugin {
+	seed, err := loadOfficialDependencySeed(version)
+	if err != nil || seed == nil || len(seed.Catalog) == 0 {
+		return nil
+	}
+
+	plugins := make([]Plugin, 0, len(seed.Catalog))
+	for _, item := range seed.Catalog {
+		name := strings.TrimSpace(item.Name)
+		artifactID := strings.TrimSpace(item.ArtifactID)
+		if name == "" || artifactID == "" {
+			continue
+		}
+		docURL := fmt.Sprintf("%s/%s/connector-v2", SeaTunnelDocsBaseURL, version)
+		if strings.TrimSpace(item.DocURL) != "" {
+			docURL = strings.TrimSpace(item.DocURL)
+			if seed.TemplateVersion != "" && version != "" {
+				docURL = strings.Replace(docURL, "/docs/"+seed.TemplateVersion+"/", "/docs/"+version+"/", 1)
+			}
+		}
+
+		plugins = append(plugins, Plugin{
+			Name:        name,
+			DisplayName: firstNonEmpty(item.DisplayName, strings.Title(strings.ReplaceAll(name, "-", " "))),
+			Category:    PluginCategoryConnector,
+			Version:     version,
+			Description: fmt.Sprintf("SeaTunnel %s connector / SeaTunnel %s 连接器", firstNonEmpty(item.DisplayName, name), firstNonEmpty(item.DisplayName, name)),
+			GroupID:     firstNonEmpty(item.GroupID, "org.apache.seatunnel"),
+			ArtifactID:  artifactID,
+			DocURL:      docURL,
+		})
+	}
+
+	plugins = s.filterHiddenPluginsForVersion(version, plugins)
+	sort.Slice(plugins, func(i, j int) bool {
+		return plugins[i].Name < plugins[j].Name
+	})
+	return plugins
+}
+
+func catalogFetchFailureKey(version string, mirror MirrorSource) string {
+	return strings.TrimSpace(version) + ":" + string(mirror)
+}
+
+func (s *Service) shouldSkipRemoteCatalogFetch(version string, mirror MirrorSource) bool {
+	key := catalogFetchFailureKey(version, mirror)
+	s.pluginsMu.RLock()
+	until := s.catalogFetchFailureUntil[key]
+	s.pluginsMu.RUnlock()
+	return !until.IsZero() && time.Now().Before(until)
+}
+
+func (s *Service) markRemoteCatalogFetchFailed(version string, mirror MirrorSource) {
+	key := catalogFetchFailureKey(version, mirror)
+	s.pluginsMu.Lock()
+	s.catalogFetchFailureUntil[key] = time.Now().Add(10 * time.Minute)
+	s.pluginsMu.Unlock()
+}
+
+func (s *Service) clearRemoteCatalogFetchFailure(version string, mirror MirrorSource) {
+	key := catalogFetchFailureKey(version, mirror)
+	s.pluginsMu.Lock()
+	delete(s.catalogFetchFailureUntil, key)
+	s.pluginsMu.Unlock()
 }
 
 // fetchPluginsFromDocs fetches plugin list from Maven repository.
@@ -281,18 +361,37 @@ func (s *Service) fetchPluginsFromDocs(ctx context.Context, version string, mirr
 // Uses concurrent version checking for better performance.
 // 使用并发版本检查以提高性能。
 func (s *Service) fetchConnectorsFromMaven(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, MirrorSource, error) {
-	logger.InfoF(ctx, "[Plugin] Fetching connectors from Maven for version %s via mirror %s", version, mirror)
+	var lastErr error
+	for _, candidate := range connectorMirrorFallbackOrder(mirror) {
+		logger.InfoF(ctx, "[Plugin] Fetching connectors from Maven for version %s via mirror %s", version, candidate)
+		connectors, err := s.fetchConnectorsFromMirror(ctx, version, candidate)
+		if err == nil {
+			return connectors, candidate, nil
+		}
+		lastErr = err
+		logger.WarnF(ctx, "[Plugin] Mirror %s connector discovery failed: %v", candidate, err)
+	}
+	return nil, mirror, lastErr
+}
 
-	connectors, err := s.fetchConnectorsFromMirror(ctx, version, mirror)
-	if err == nil {
-		return connectors, mirror, nil
+func connectorMirrorFallbackOrder(preferred MirrorSource) []MirrorSource {
+	ordered := []MirrorSource{}
+	add := func(item MirrorSource) {
+		if _, ok := MirrorURLs[item]; !ok {
+			return
+		}
+		for _, existing := range ordered {
+			if existing == item {
+				return
+			}
+		}
+		ordered = append(ordered, item)
 	}
-	if mirror != MirrorSourceApache {
-		logger.WarnF(ctx, "[Plugin] Mirror %s connector discovery failed, fallback to apache: %v", mirror, err)
-		connectors, err = s.fetchConnectorsFromMirror(ctx, version, MirrorSourceApache)
-		return connectors, MirrorSourceApache, err
-	}
-	return nil, mirror, err
+	add(preferred)
+	add(MirrorSourceAliyun)
+	add(MirrorSourceHuaweiCloud)
+	add(MirrorSourceApache)
+	return ordered
 }
 
 func (s *Service) fetchConnectorsFromMirror(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, error) {
@@ -302,6 +401,7 @@ func (s *Service) fetchConnectorsFromMirror(ctx context.Context, version string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	applyMavenRequestHeaders(req)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -383,6 +483,7 @@ func (s *Service) checkConnectorVersion(ctx context.Context, artifactID, version
 	if err != nil {
 		return false, err
 	}
+	applyMavenRequestHeaders(req)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -447,7 +548,17 @@ func getArtifactID(name string) string {
 // RefreshPlugins forces a refresh of the plugin list from Maven repository.
 // RefreshPlugins 强制从 Maven 仓库刷新插件列表。
 func (s *Service) RefreshPlugins(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, error) {
-	plugins, usedMirror, err := s.fetchPluginsFromDocs(ctx, version, MirrorSourceApache)
+	if version == "" {
+		version = seatunnel.DefaultVersion()
+	}
+	if mirror == "" {
+		mirror = MirrorSourceApache
+	}
+	if _, ok := MirrorURLs[mirror]; !ok {
+		return nil, ErrInvalidMirror
+	}
+
+	plugins, usedMirror, err := s.fetchPluginsFromDocs(ctx, version, mirror)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +592,7 @@ func (s *Service) getPluginInfoWithMirror(ctx context.Context, name string, vers
 	normalizedName := strings.ToLower(name)
 
 	// Resolve from DB snapshot or remote fetch / 从数据库快照或远端抓取中解析
-	fetchedPlugins, _, _, _, _ := s.getPlugins(ctx, version)
+	fetchedPlugins, _, _, _, _ := s.getPlugins(ctx, version, mirror)
 	for _, p := range fetchedPlugins {
 		if strings.ToLower(p.Name) == normalizedName {
 			enriched := s.enrichPluginsWithDependencyState(ctx, version, []Plugin{p})
@@ -916,7 +1027,7 @@ func (s *Service) DownloadAllPlugins(ctx context.Context, version string, mirror
 	}
 
 	// Get all available plugins / 获取所有可用插件
-	plugins, _, _, _, _ := s.getPlugins(ctx, version)
+	plugins, _, _, _, _ := s.getPlugins(ctx, version, mirror)
 	if len(plugins) == 0 {
 		return nil, fmt.Errorf("no plugins found for version %s / 未找到版本 %s 的插件", version, version)
 	}

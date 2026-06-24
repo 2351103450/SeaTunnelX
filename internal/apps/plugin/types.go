@@ -213,6 +213,7 @@ type PluginListSource string
 const (
 	PluginListSourceDatabase PluginListSource = "database"
 	PluginListSourceRemote   PluginListSource = "remote"
+	PluginListSourceSeed     PluginListSource = "seed"
 )
 
 type AvailablePluginsResponse struct {

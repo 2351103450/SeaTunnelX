@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -382,8 +383,8 @@ func TestListAvailablePluginsFetchesRemoteAndPersistsCatalog(t *testing.T) {
 	disableSeedAutoLoad(service, "9.9.9")
 
 	service.SetPluginFetcher(func(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, MirrorSource, error) {
-		if mirror != MirrorSourceApache {
-			t.Fatalf("expected catalog fetch to use apache, got %q", mirror)
+		if mirror != MirrorSourceAliyun {
+			t.Fatalf("expected catalog fetch to use requested mirror, got %q", mirror)
 		}
 		return []Plugin{{
 			Name:        "hive",
@@ -425,6 +426,42 @@ func TestListAvailablePluginsFetchesRemoteAndPersistsCatalog(t *testing.T) {
 	}
 	if entries[0].RefreshedAt == nil {
 		t.Fatalf("expected persisted refreshed_at")
+	}
+}
+
+func TestListAvailablePluginsFallsBackToBundledSeedWhenRemoteRateLimited(t *testing.T) {
+	service, _ := newTestPluginService(t)
+	ctx := context.Background()
+	calls := 0
+
+	service.SetPluginFetcher(func(ctx context.Context, version string, mirror MirrorSource) ([]Plugin, MirrorSource, error) {
+		calls++
+		return nil, mirror, errors.New("unexpected status code: 429")
+	})
+
+	result, err := service.ListAvailablePlugins(ctx, "2.3.13", MirrorSourceApache)
+	if err != nil {
+		t.Fatalf("ListAvailablePlugins returned error: %v", err)
+	}
+	if result.Source != PluginListSourceSeed {
+		t.Fatalf("expected source=seed, got %q", result.Source)
+	}
+	if result.Total == 0 {
+		t.Fatalf("expected bundled seed plugins to be returned")
+	}
+	if calls != 1 {
+		t.Fatalf("expected first call to try remote once, got %d", calls)
+	}
+
+	cached, err := service.ListAvailablePlugins(ctx, "2.3.13", MirrorSourceApache)
+	if err != nil {
+		t.Fatalf("second ListAvailablePlugins returned error: %v", err)
+	}
+	if cached.Source != PluginListSourceSeed || !cached.CacheHit {
+		t.Fatalf("expected cached seed fallback, got source=%q cache_hit=%t", cached.Source, cached.CacheHit)
+	}
+	if calls != 1 {
+		t.Fatalf("expected remote fetch to be skipped during cooldown, got %d calls", calls)
 	}
 }
 

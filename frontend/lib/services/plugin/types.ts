@@ -44,7 +44,7 @@ export type MirrorSource = 'apache' | 'aliyun' | 'huaweicloud';
  * Available plugin list source
  * 可用插件列表来源
  */
-export type PluginListSource = 'database' | 'remote';
+export type PluginListSource = 'database' | 'remote' | 'seed';
 
 /**
  * Official dependency status
